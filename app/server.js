@@ -12,6 +12,7 @@ import {
 import { interviewTurn } from './src/interview.js';
 import { runPipeline } from './src/pipeline.js';
 import { runEditPipeline } from './src/editdeck.js';
+import { assemble } from './src/assemble.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -71,14 +72,31 @@ function newJob(orgId, conversationId, kind) {
     id: crypto.randomUUID(), orgId, conversationId, kind,
     status: 'running', createdAt: Date.now(),
     events: [], listeners: new Set(), deckId: null, error: null,
+    // preview parcial ao vivo
+    outline: null, slides: [], previewVersion: 0,
   };
   jobs.set(job.id, job);
   return job;
 }
-function emitJob(job, stage, message, extra) {
-  const ev = { ts: Date.now(), stage, message, extra };
+function pushEvent(job, ev) {
+  ev.ts = Date.now();
   job.events.push(ev);
-  for (const l of job.listeners) l.write(`data: ${JSON.stringify(ev)}\n\n`);
+  const line = `data: ${JSON.stringify(ev)}\n\n`;
+  for (const l of job.listeners) l.write(line);
+}
+// narração compatível: superset de {type:'stage',stage,msg,data} + campos legados
+function emitJob(job, stage, message, extra) {
+  pushEvent(job, { type: 'stage', stage, msg: message, message, data: extra, extra });
+}
+// eventos tipados do contrato (outline/slide/preview/deck_ready/error)
+function emitTyped(job, ev) {
+  pushEvent(job, ev);
+}
+function activeJobFor(conversationId) {
+  for (const job of jobs.values()) {
+    if (job.conversationId === conversationId && job.status === 'running') return job;
+  }
+  return null;
 }
 
 async function getOrg(orgId) {
@@ -93,12 +111,40 @@ async function latestDeck(conversationId) {
   return r.rows[0] || null;
 }
 
+// Mensagem amigável ao modelo quando já há geração/edição em andamento na conversa.
+const BUSY_MSG =
+  'já há uma geração em andamento nesta conversa — avise o usuário e continue conversando; não dispare outra.';
+
+// callbacks de preview parcial ao vivo → alimentam job.slides/outline e emitem eventos tipados
+function previewHooks(job) {
+  return {
+    onOutline: (outline) => {
+      job.outline = outline;
+      emitTyped(job, { type: 'outline', title: outline.title, slides: outline.slides.map((s) => s.title) });
+    },
+    onSlide: (slide, index, total, status) => {
+      const title = job.outline && job.outline.slides[index] ? job.outline.slides[index].title : '';
+      if (status === 'done') {
+        job.slides[index] = slide;
+        job.previewVersion += 1;
+      }
+      emitTyped(job, { type: 'slide', index, total, title, status });
+      if (status === 'done') emitTyped(job, { type: 'preview', version: job.previewVersion });
+    },
+  };
+}
+
 function launchGenerate(input, ctx) {
+  if (activeJobFor(ctx.conversationId)) return { error: BUSY_MSG };
   const job = newJob(ctx.orgId, ctx.conversationId, 'generate');
   (async () => {
     try {
       const brandKit = ctx.org.brand || {};
-      const result = await runPipeline(input, brandKit, (s, m, e) => emitJob(job, s, m, e));
+      const result = await runPipeline(
+        { ...input, ...previewHooks(job) },
+        brandKit,
+        (s, m, e) => emitJob(job, s, m, e),
+      );
       const deckId = crypto.randomUUID();
       await q(
         `INSERT INTO decks (id, org_id, conversation_id, title, outline, slides, html, version)
@@ -109,16 +155,19 @@ function launchGenerate(input, ctx) {
       job.deckId = deckId;
       job.status = 'done';
       emitJob(job, 'done', 'Apresentação pronta', { deckId });
+      emitTyped(job, { type: 'deck_ready', deckId, url: '/deck/' + deckId });
     } catch (err) {
       job.status = 'error';
       job.error = err.message;
       emitJob(job, 'error', err.message);
+      emitTyped(job, { type: 'error', error: err.message });
     }
   })();
-  return job.id;
+  return { jobId: job.id };
 }
 
 function launchEdit(input, ctx) {
+  if (activeJobFor(ctx.conversationId)) return { error: BUSY_MSG };
   const job = newJob(ctx.orgId, ctx.conversationId, 'edit');
   (async () => {
     try {
@@ -126,8 +175,10 @@ function launchEdit(input, ctx) {
       const row = r.rows[0];
       if (!row) throw new Error('esta conversa ainda não tem apresentação para editar');
       const deck = { title: row.title, outline: row.outline, slides: row.slides, brand: (ctx.org.brand || {}).name || '' };
+      // preview parte do deck atual e vai atualizando os slides tocados
+      job.slides = (row.slides || []).map((s) => ({ ...s }));
       const result = await runEditPipeline(
-        { deck, instructions: input.instructions, brandKit: ctx.org.brand || {} },
+        { deck, instructions: input.instructions, brandKit: ctx.org.brand || {}, ...previewHooks(job) },
         (s, m, e) => emitJob(job, s, m, e),
       );
       await q(
@@ -137,13 +188,15 @@ function launchEdit(input, ctx) {
       job.deckId = row.id;
       job.status = 'done';
       emitJob(job, 'done', 'Edição aplicada: ' + result.summary, { deckId: row.id });
+      emitTyped(job, { type: 'deck_ready', deckId: row.id, url: '/deck/' + row.id });
     } catch (err) {
       job.status = 'error';
       job.error = err.message;
       emitJob(job, 'error', err.message);
+      emitTyped(job, { type: 'error', error: err.message });
     }
   })();
-  return job.id;
+  return { jobId: job.id };
 }
 
 /* ================= handlers ================= */
@@ -173,6 +226,14 @@ async function handleMe(res, sess) {
   sendJson(res, 200, { user: u.rows[0], org: o.rows[0] });
 }
 
+// deriva o estado da conversa: briefing | generating | editing | ready
+function deriveState(conversationId, hasDeck) {
+  const job = activeJobFor(conversationId);
+  if (job) return { state: job.kind === 'edit' ? 'editing' : 'generating', jobId: job.id };
+  if (hasDeck) return { state: 'ready' };
+  return { state: 'briefing' };
+}
+
 async function handleListConversations(res, sess) {
   const r = await q(
     `SELECT c.id, c.title, c.updated_at AS "updatedAt",
@@ -180,7 +241,8 @@ async function handleListConversations(res, sess) {
      FROM conversations c WHERE c.org_id = $1 ORDER BY c.updated_at DESC LIMIT 100`,
     [sess.orgId],
   );
-  sendJson(res, 200, r.rows);
+  const rows = r.rows.map((c) => ({ ...c, ...deriveState(c.id, c.deckCount > 0) }));
+  sendJson(res, 200, rows);
 }
 async function handleCreateConversation(res, sess) {
   const id = crypto.randomUUID();
@@ -195,12 +257,31 @@ async function handleGetConversation(res, sess, id) {
     'SELECT id, title, version, updated_at AS "updatedAt" FROM decks WHERE conversation_id = $1 ORDER BY updated_at DESC',
     [id],
   );
+  // estado derivado + campos associados (jobId quando gerando/editando; deck quando ready)
+  const derived = deriveState(id, decks.rows.length > 0);
+  const latest = decks.rows[0];
+  if (latest) {
+    derived.deckId = latest.id;
+    derived.deckUrl = '/deck/' + latest.id;
+    derived.version = latest.version;
+  }
   sendJson(res, 200, {
     id, title: c.rows[0].title,
     messages: msgs.rows,
     decks: decks.rows,
     docs: (c.rows[0].docs || []).map((d) => d.name),
+    ...derived,
   });
+}
+
+async function handleConversationDecks(res, sess, id) {
+  const c = await q('SELECT id FROM conversations WHERE id = $1 AND org_id = $2', [id, sess.orgId]);
+  if (!c.rows.length) return sendJson(res, 404, { error: 'conversa não encontrada' });
+  const decks = await q(
+    'SELECT id, version, title, created_at AS "createdAt" FROM decks WHERE conversation_id = $1 ORDER BY version DESC',
+    [id],
+  );
+  sendJson(res, 200, decks.rows);
 }
 
 async function handleChat(req, res, sess) {
@@ -214,54 +295,69 @@ async function handleChat(req, res, sess) {
   const conv = c.rows[0];
   const org = await getOrg(sess.orgId);
 
-  // anexos de documento deste turno somam ao acervo da conversa
-  let convDocs = conv.docs || [];
-  if (Array.isArray(docs) && docs.length) {
-    convDocs = convDocs.concat(docs.map((d) => ({ name: String(d.name || 'doc'), text: String(d.text || '') })));
-    await q('UPDATE conversations SET docs = $1 WHERE id = $2', [JSON.stringify(convDocs), conversationId]);
-  }
+  // a partir daqui a resposta é SSE (text/event-stream); erros viram evento `error`
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  const sse = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  sse({ type: 'start' });
 
-  // grava a mensagem do usuário e monta o histórico para o modelo
-  await q('INSERT INTO messages (conversation_id, role, content) VALUES ($1,$2,$3)',
-    [conversationId, 'user', JSON.stringify(blocks)]);
-  if (conv.title === 'Nova conversa') {
-    const firstText = blocks.find((b) => b.type === 'text');
-    if (firstText) {
-      await q('UPDATE conversations SET title = $1 WHERE id = $2',
-        [firstText.text.replace(/^\(/, '').slice(0, 64), conversationId]);
+  try {
+    // anexos de documento deste turno somam ao acervo da conversa
+    let convDocs = conv.docs || [];
+    if (Array.isArray(docs) && docs.length) {
+      convDocs = convDocs.concat(docs.map((d) => ({ name: String(d.name || 'doc'), text: String(d.text || '') })));
+      await q('UPDATE conversations SET docs = $1 WHERE id = $2', [JSON.stringify(convDocs), conversationId]);
     }
-  }
-  const hist = await q('SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id', [conversationId]);
-  const messages = hist.rows.map((m) => ({ role: m.role, content: m.content }));
 
-  const deck = await latestDeck(conversationId);
-  const ctx = { orgId: sess.orgId, conversationId, org };
-  const { reply, jobId, jobKind } = await interviewTurn(
-    messages,
-    { brand: org.brand || {}, deck },
-    {
-      updateBrand: (input) => {
-        const cur = org.brand || {};
-        const next = {
-          ...cur,
-          ...(input.name !== undefined ? { name: String(input.name) } : {}),
-          ...(input.tone !== undefined ? { tone: String(input.tone) } : {}),
-          ...(input.radius !== undefined ? { radius: String(input.radius) } : {}),
-        };
-        if (input.colors) next.colors = { ...(cur.colors || {}), ...input.colors };
-        org.brand = next;
-        q('UPDATE orgs SET brand = $1 WHERE id = $2', [JSON.stringify(next), sess.orgId]).catch(() => {});
-        return next;
+    // grava a mensagem do usuário e monta o histórico para o modelo
+    await q('INSERT INTO messages (conversation_id, role, content) VALUES ($1,$2,$3)',
+      [conversationId, 'user', JSON.stringify(blocks)]);
+    let newTitle = null;
+    if (conv.title === 'Nova conversa') {
+      const firstText = blocks.find((b) => b.type === 'text');
+      if (firstText) {
+        newTitle = firstText.text.replace(/^\(/, '').slice(0, 64);
+        await q('UPDATE conversations SET title = $1 WHERE id = $2', [newTitle, conversationId]);
+      }
+    }
+    const hist = await q('SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY id', [conversationId]);
+    const messages = hist.rows.map((m) => ({ role: m.role, content: m.content }));
+
+    const deck = await latestDeck(conversationId);
+    const ctx = { orgId: sess.orgId, conversationId, org };
+    const { reply } = await interviewTurn(
+      messages,
+      { brand: org.brand || {}, deck: deck ? { id: deck.id, title: deck.title, version: deck.version } : null },
+      {
+        updateBrand: (input) => {
+          const cur = org.brand || {};
+          const next = {
+            ...cur,
+            ...(input.name !== undefined ? { name: String(input.name) } : {}),
+            ...(input.tone !== undefined ? { tone: String(input.tone) } : {}),
+            ...(input.radius !== undefined ? { radius: String(input.radius) } : {}),
+          };
+          if (input.colors) next.colors = { ...(cur.colors || {}), ...input.colors };
+          org.brand = next;
+          q('UPDATE orgs SET brand = $1 WHERE id = $2', [JSON.stringify(next), sess.orgId]).catch(() => {});
+          return next;
+        },
+        startGeneration: (input) => launchGenerate({ ...input, docs: convDocs }, ctx),
+        startEdit: (input) => launchEdit(input, ctx),
       },
-      startGeneration: (input) => launchGenerate({ ...input, docs: convDocs }, ctx),
-      startEdit: (input) => launchEdit(input, ctx),
-    },
-  );
+      {
+        onToken: (text) => sse({ type: 'token', text }),
+        onEvent: (evt) => sse(evt),
+      },
+    );
 
-  await q('INSERT INTO messages (conversation_id, role, content) VALUES ($1,$2,$3)',
-    [conversationId, 'assistant', JSON.stringify(reply)]);
-  await q('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId]);
-  sendJson(res, 200, { reply, jobId: jobId || undefined, jobKind: jobKind || undefined });
+    await q('INSERT INTO messages (conversation_id, role, content) VALUES ($1,$2,$3)',
+      [conversationId, 'assistant', JSON.stringify(reply)]);
+    await q('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId]);
+    sse({ type: 'done', message: reply, conversationId, ...(newTitle ? { title: newTitle } : {}) });
+    res.end();
+  } catch (err) {
+    try { sse({ type: 'error', error: err.message || 'erro interno' }); res.end(); } catch {}
+  }
 }
 
 function handleStream(req, res, sess, id) {
@@ -279,6 +375,41 @@ async function handleDeck(res, sess, id) {
   if (!r.rows.length) return sendJson(res, 404, { error: 'apresentação não encontrada' });
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(r.rows[0].html);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// placeholder simples para slide ainda não construído (título do outline + "construindo…")
+function placeholderSlide(title) {
+  return {
+    html: `<section class="slide"><div class="absolute left-14 top-1/2 -translate-y-1/2 max-w-[62%]">`
+      + `<div class="text-mut text-xs font-extrabold tracking-[.22em] mb-4">CONSTRUINDO…</div>`
+      + `<h2 class="text-5xl font-extrabold leading-tight">${escHtml(title || 'Slide')}</h2>`
+      + `<p class="text-mut mt-5">construindo…</p></div></section>`,
+    js: '',
+  };
+}
+
+// Deck parcial ao vivo: monta com os slides prontos até agora + placeholders.
+async function handlePreview(res, sess, id) {
+  const job = jobs.get(id);
+  if (!job || job.orgId !== sess.orgId) return sendJson(res, 404, { error: 'não encontrado' });
+  const outlineSlides = job.outline ? job.outline.slides : [];
+  const total = Math.max(job.slides.length, outlineSlides.length);
+  const readyCount = job.slides.filter(Boolean).length;
+  if (!total || !readyCount) { res.writeHead(204); return res.end(); }
+  const slides = [];
+  for (let i = 0; i < total; i++) {
+    slides.push(job.slides[i] || placeholderSlide(outlineSlides[i] ? outlineSlides[i].title : ''));
+  }
+  const org = await getOrg(job.orgId);
+  const kit = (org && org.brand) || {};
+  const title = (job.outline && job.outline.title) || 'Apresentação';
+  const brand = kit.name || (job.outline && job.outline.brand) || '';
+  const html = assemble({ title, brand, slides, theme: kit });
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+  res.end(html);
 }
 
 /* ================= roteamento ================= */
@@ -311,9 +442,11 @@ const server = http.createServer(async (req, res) => {
     if (m === 'GET' && p === '/api/conversations') return handleListConversations(res, sess);
     if (m === 'POST' && p === '/api/conversations') return handleCreateConversation(res, sess);
     let mm;
+    if (m === 'GET' && (mm = p.match(/^\/api\/conversations\/([^/]+)\/decks$/))) return handleConversationDecks(res, sess, mm[1]);
     if (m === 'GET' && (mm = p.match(/^\/api\/conversations\/([^/]+)$/))) return handleGetConversation(res, sess, mm[1]);
     if (m === 'POST' && p === '/api/chat') return handleChat(req, res, sess);
     if (m === 'GET' && (mm = p.match(/^\/api\/jobs\/([^/]+)\/stream$/))) return handleStream(req, res, sess, mm[1]);
+    if (m === 'GET' && (mm = p.match(/^\/api\/jobs\/([^/]+)\/preview$/))) return handlePreview(res, sess, mm[1]);
     if (m === 'GET' && (mm = p.match(/^\/deck\/([^/]+)$/))) return handleDeck(res, sess, mm[1]);
 
     if (m === 'GET' && p === '/api/config') {

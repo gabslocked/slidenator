@@ -19,7 +19,7 @@ export default function CTA() {
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <a
-              href="https://app.slidenator.com"
+              href="https://app.slidenator.com/login"
               className="btn-shine rounded-xl bg-neon px-8 py-4 text-sm font-semibold text-white transition-colors hover:bg-[#4a617c]"
             >
               Abrir o Slidenator

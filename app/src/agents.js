@@ -91,7 +91,7 @@ function anthropicThinking(p, maxTokens) {
   return { type: 'enabled', budget_tokens: Math.max(1024, Math.min(8192, Math.floor(maxTokens / 2))) };
 }
 
-async function anthropicMessage(p, { model, system, messages, tools, maxTokens }) {
+async function anthropicMessage(p, { model, system, messages, tools, maxTokens, onToken }) {
   const client = anthropicClient(p);
   const params = {
     model,
@@ -102,15 +102,25 @@ async function anthropicMessage(p, { model, system, messages, tools, maxTokens }
   };
   if (tools) params.tools = tools;
   const stream = client.messages.stream(params);
+  // Streaming real via SDK Anthropic (funciona direto na Anthropic nativa; no
+  // gateway do Kimi depende do gateway repassar os deltas SSE).
+  let emitted = false;
+  if (onToken) stream.on('text', (delta) => { if (delta) { emitted = true; onToken(delta); } });
   const msg = await stream.finalMessage();
   if (msg.stop_reason === 'refusal') throw new Error('O modelo recusou a solicitação');
+  // Fallback documentado: se o gateway não entregou deltas de texto, emite o
+  // texto final de uma só vez para não deixar o cliente sem streaming algum.
+  if (onToken && !emitted) {
+    const full = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    if (full) onToken(full);
+  }
   return msg;
 }
 
-async function anthropicRunTools(p, { model, system, messages, tools, onTool, maxTokens, maxIters }) {
+async function anthropicRunTools(p, { model, system, messages, tools, onTool, onToken, maxTokens, maxIters }) {
   const msgs = [...messages];
   for (let i = 0; i < maxIters; i++) {
-    const resp = await anthropicMessage(p, { model, system, messages: msgs, tools, maxTokens });
+    const resp = await anthropicMessage(p, { model, system, messages: msgs, tools, maxTokens, onToken });
     if (resp.stop_reason === 'tool_use') {
       msgs.push({ role: 'assistant', content: resp.content });
       const results = [];
@@ -168,7 +178,56 @@ function tallyUsage(model, usage) {
   u.calls += 1;
 }
 
-async function openaiComplete(p, { model, messages, tools, maxTokens, schema }) {
+/**
+ * Faz o parse do SSE estilo OpenAI (Cerebras), acumulando `delta.content`
+ * (chamando onToken a cada pedaço) e `delta.tool_calls` por índice
+ * (id/name/arguments concatenados). Captura o chunk final com `usage`.
+ * Retorna { message: {role, content, tool_calls?}, finishReason, usage }.
+ */
+async function parseOpenAIStream(res, onToken) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let content = '';
+  const toolCalls = [];
+  let finishReason = null;
+  let usage = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) !== -1) {
+      const raw = buf.slice(0, nl).replace(/\r$/, '');
+      buf = buf.slice(nl + 1);
+      if (!raw.startsWith('data:')) continue;
+      const payload = raw.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      let chunk;
+      try { chunk = JSON.parse(payload); } catch { continue; }
+      if (chunk.usage) usage = chunk.usage;
+      const choice = chunk.choices && chunk.choices[0];
+      if (!choice) continue;
+      const delta = choice.delta || {};
+      if (delta.content) { content += delta.content; onToken(delta.content); }
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const i = tc.index ?? 0;
+          const slot = (toolCalls[i] ||= { id: '', type: 'function', function: { name: '', arguments: '' } });
+          if (tc.id) slot.id = tc.id;
+          if (tc.function?.name) slot.function.name += tc.function.name;
+          if (tc.function?.arguments) slot.function.arguments += tc.function.arguments;
+        }
+      }
+      if (choice.finish_reason) finishReason = choice.finish_reason;
+    }
+  }
+  const tool_calls = toolCalls.filter(Boolean);
+  const message = { role: 'assistant', content, ...(tool_calls.length ? { tool_calls } : {}) };
+  return { message, finishReason, usage };
+}
+
+async function openaiComplete(p, { model, messages, tools, maxTokens, schema, onToken }) {
   const body = { model, messages };
   if (schema) {
     body.response_format = { type: 'json_schema', json_schema: { name: 'saida', strict: true, schema } };
@@ -178,6 +237,11 @@ async function openaiComplete(p, { model, messages, tools, maxTokens, schema }) 
       type: 'function',
       function: { name: t.name, description: t.description, parameters: t.input_schema },
     }));
+  }
+  if (onToken) {
+    // streaming SSE; pede o chunk final com usage para alimentar o tallyUsage
+    body.stream = true;
+    body.stream_options = { include_usage: true };
   }
   let lastErr;
   let budget = maxTokens;
@@ -190,19 +254,29 @@ async function openaiComplete(p, { model, messages, tools, maxTokens, schema }) 
       signal: AbortSignal.timeout(600000),
     });
     if (res.ok) {
-      const data = await res.json();
-      tallyUsage(model, data.usage);
-      const choice = data.choices[0];
+      let message, finishReason, usage;
+      if (onToken) {
+        ({ message, finishReason, usage } = await parseOpenAIStream(res, onToken));
+      } else {
+        const data = await res.json();
+        usage = data.usage;
+        const choice = data.choices[0];
+        message = choice.message;
+        finishReason = choice.finish_reason;
+      }
+      tallyUsage(model, usage);
       // modelos pensantes (ex.: GLM) gastam o orçamento no raciocínio antes do
-      // conteúdo — se truncou, amplia o orçamento e tenta de novo (até 4×)
-      if (choice.finish_reason === 'length' && budget < maxTokens * 4) {
+      // conteúdo — se truncou, amplia o orçamento e refaz a chamada (até 4×).
+      // No streaming isso reemite os tokens já enviados; o cliente usa o
+      // done.message final como fonte de verdade, então a duplicação é transitória.
+      if (finishReason === 'length' && budget < maxTokens * 4) {
         budget *= 2;
         continue;
       }
-      if (choice.finish_reason === 'length') {
+      if (finishReason === 'length') {
         throw new Error('Resposta truncada mesmo após ampliar max_tokens para ' + budget);
       }
-      return choice.message;
+      return message;
     }
     const errText = await res.text().catch(() => '');
     lastErr = new Error(`Cerebras ${res.status}: ${errText.slice(0, 200)}`);
@@ -212,10 +286,10 @@ async function openaiComplete(p, { model, messages, tools, maxTokens, schema }) 
   throw lastErr;
 }
 
-async function openaiRunTools(p, { model, system, messages, tools, onTool, maxTokens, maxIters }) {
+async function openaiRunTools(p, { model, system, messages, tools, onTool, onToken, maxTokens, maxIters }) {
   const msgs = toOpenAIHistory(system, messages);
   for (let i = 0; i < maxIters; i++) {
-    const msg = await openaiComplete(p, { model, messages: msgs, tools, maxTokens });
+    const msg = await openaiComplete(p, { model, messages: msgs, tools, maxTokens, onToken });
     const calls = msg.tool_calls || [];
     if (calls.length) {
       msgs.push({ role: 'assistant', content: msg.content || '', tool_calls: calls });
@@ -311,9 +385,9 @@ export async function aiJSON({ role, system, user, schema, maxTokens = 32000 }) 
  * messages: [{role:'user'|'assistant', content: string | blocos}] (histórico da conversa).
  * onTool(name, input) → string com o resultado.
  */
-export async function runTools({ role, system, messages, tools, onTool, maxTokens = 4000, maxIters = 5 }) {
+export async function runTools({ role, system, messages, tools, onTool, onToken, maxTokens = 4000, maxIters = 5 }) {
   const p = resolveRole(role);
-  const args = { model: p.model, system, messages, tools, onTool, maxTokens, maxIters };
+  const args = { model: p.model, system, messages, tools, onTool, onToken, maxTokens, maxIters };
   return p.style === 'openai' ? openaiRunTools(p, args) : anthropicRunTools(p, args);
 }
 

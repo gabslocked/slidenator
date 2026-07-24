@@ -42,10 +42,11 @@ Regras:
  * deck: { title, outline, slides:[{html,js}], brand }
  * Retorna { slides, html, summary }.
  */
-export async function runEditPipeline({ deck, instructions, brandKit }, emit) {
+export async function runEditPipeline({ deck, instructions, brandKit, onOutline, onSlide }, emit) {
   const kit = brandKit || {};
 
   emit('edicao', 'Editor analisando o deck e aplicando as mudanças…');
+  if (onOutline && deck.outline) onOutline(deck.outline);
   const slidesDump = deck.slides
     .map((s, i) => `### SLIDE ${i} — html:\n${s.html}\n### SLIDE ${i} — js:\n${s.js || '(estático)'}`)
     .join('\n\n');
@@ -70,13 +71,16 @@ export async function runEditPipeline({ deck, instructions, brandKit }, emit) {
   }
   if (!touched.length) throw new Error('O editor não devolveu nenhuma mudança');
   emit('edicao', `${touched.length} slide(s) alterado(s): ${touched.map((i) => i + 1).join(', ')}`);
+  const total = slides.length;
+  for (const idx of touched) if (onSlide) onSlide(null, idx, total, 'building');
 
   /* valida e corrige apenas os slides tocados */
   await mapLimit(touched, 3, async (idx) => {
     for (let attempt = 0; attempt < 2; attempt++) {
       const issues = validateSlide(slides[idx]);
-      if (!issues.length) return;
+      if (!issues.length) break;
       emit('edicao', `Slide ${idx + 1}: corrigindo ${issues.length} problema(s)…`, { issues });
+      if (onSlide) onSlide(null, idx, total, 'fixing');
       slides[idx] = await aiJSON({ role: 'pipeline',
         system: REVISOR_SYSTEM,
         user: [
@@ -88,6 +92,7 @@ export async function runEditPipeline({ deck, instructions, brandKit }, emit) {
         maxTokens: 32000,
       });
     }
+    if (onSlide) onSlide(slides[idx], idx, total, 'done');
   });
 
   const deckIssues = validateDeck(slides);

@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 const LINKS = [
   { href: "#como-funciona", label: "Como funciona" },
   { href: "#recursos", label: "Recursos" },
+  { href: "#para-quem", label: "Para quem" },
   { href: "#planos", label: "Planos" },
 ];
 
@@ -35,7 +36,7 @@ export default function Nav() {
         </div>
 
         <a
-          href="https://app.slidenator.com"
+          href="https://app.slidenator.com/login"
           className="rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-void transition-opacity hover:opacity-85"
         >
           Entrar

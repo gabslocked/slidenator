@@ -292,7 +292,8 @@ function SlideDemo() {
 const AGENT_STEPS = [
   { label: "[roteiro]", detail: "narrativa e estrutura" },
   { label: "[design]", detail: "identidade visual aplicada" },
-  { label: "[construcao]", detail: "Slide 3/6 pronto…" },
+  { label: "[interacao]", detail: "animações e demos" },
+  { label: "[construcao]", detail: "slides em paralelo…" },
   { label: "[revisao]", detail: "coerência verificada" },
 ];
 
@@ -313,7 +314,7 @@ function AgentsFeed() {
   }, [reduced]);
 
   return (
-    <div className="mt-5 h-[160px] overflow-hidden rounded-xl border border-hair bg-deep px-4 py-3 font-mono text-[11.5px] leading-[1.9]">
+    <div className="mt-5 h-[182px] overflow-hidden rounded-xl border border-hair bg-deep px-4 py-3 font-mono text-[11.5px] leading-[1.9]">
       <AnimatePresence initial={false}>
         {AGENT_STEPS.slice(0, count).map((step, i) => {
           const done = i < count - 1 || count === AGENT_STEPS.length;

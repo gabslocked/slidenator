@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { lazy, Suspense, useRef } from "react";
+import { motion, useReducedMotion, useScroll } from "framer-motion";
 
 const SlideField = lazy(() => import("../three/SlideField"));
 
@@ -21,14 +21,23 @@ function Word({ word, delay }: { word: string; delay: number }) {
 
 export default function Hero() {
   const reduced = useReducedMotion() ?? false;
+  const ref = useRef<HTMLElement | null>(null);
+  // Progresso do scroll do herói → alimenta a cena 3D via MotionValue (sem re-render)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start start", "end start"],
+  });
 
   return (
-    <section className="scope-dark corner-ticks relative flex min-h-dvh flex-col justify-end overflow-hidden">
-      {/* three.js scene — blueprint slide frames floating in depth */}
+    <section
+      ref={ref}
+      className="scope-dark corner-ticks relative flex min-h-dvh flex-col justify-end overflow-hidden"
+    >
+      {/* three.js — molduras blueprint flutuando em profundidade, reativas ao scroll */}
       {!reduced && (
         <div className="pointer-events-none absolute inset-0 opacity-45">
           <Suspense fallback={null}>
-            <SlideField tone="#a8b8d4" />
+            <SlideField tone="#a8b8d4" scroll={scrollYProgress} />
           </Suspense>
         </div>
       )}
@@ -39,7 +48,7 @@ export default function Hero() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_55%_at_50%_42%,transparent_0%,#0b0b0e_92%)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#0b0b0e] to-transparent" />
 
-      {/* Chip left — script agent done */}
+      {/* Chip esquerda — roteirista concluiu */}
       <motion.div
         initial={{ opacity: 0, x: -24 }}
         animate={{ opacity: 1, x: 0 }}
@@ -53,7 +62,7 @@ export default function Hero() {
         </div>
       </motion.div>
 
-      {/* Chip right top — presentation ready */}
+      {/* Chip direita topo — apresentação pronta em segundos */}
       <motion.div
         initial={{ opacity: 0, x: 24 }}
         animate={{ opacity: 1, x: 0 }}
@@ -65,7 +74,7 @@ export default function Hero() {
             Apresentação pronta
           </p>
           <p className="mt-1 flex items-baseline gap-1.5 font-mono text-sm font-medium tabular-nums text-ink">
-            10 slides
+            7 slides · 9,2s
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -82,7 +91,7 @@ export default function Hero() {
         </div>
       </motion.div>
 
-      {/* Chip right lower — identity detected */}
+      {/* Chip direita inferior — identidade detectada */}
       <motion.div
         initial={{ opacity: 0, x: 24 }}
         animate={{ opacity: 1, x: 0 }}
@@ -106,7 +115,7 @@ export default function Hero() {
         </div>
       </motion.div>
 
-      {/* Hero content */}
+      {/* Conteúdo do herói */}
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 pt-32 text-center">
         {/* Kicker badge */}
         <motion.a
@@ -117,11 +126,11 @@ export default function Hero() {
           className="glass group mb-8 flex items-center gap-2.5 rounded-full py-1.5 pl-3 pr-4 font-mono text-[11px] uppercase tracking-[0.14em] text-mut transition-colors hover:text-ink"
         >
           <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-mint" />
-          Apresentações interativas
+          Acompanhe cada slide surgir ao vivo
           <span className="text-dim transition-transform group-hover:translate-x-0.5">→</span>
         </motion.a>
 
-        {/* Headline — word by word */}
+        {/* Headline — palavra a palavra */}
         <h1 className="display max-w-4xl text-[3.2rem] leading-[1.02] md:text-[5rem]">
           <span className="block">
             {WORDS_1.map((w, i) => (
@@ -141,8 +150,8 @@ export default function Hero() {
           transition={{ duration: 0.8, delay: 1.1 }}
           className="mt-7 max-w-xl text-base leading-relaxed text-mut md:text-lg"
         >
-          Descreva sua apresentação em chat. Agents cuidam do roteiro, identidade visual e
-          animações — entregam HTML interativo em minutos.
+          Descreva em chat. A tela divide, os slides surgem um a um ao lado da conversa — uma
+          apresentação HTML interativa em segundos, não numa tarde inteira.
         </motion.p>
 
         <motion.div
@@ -152,7 +161,7 @@ export default function Hero() {
           className="mt-9 flex flex-wrap items-center justify-center gap-3"
         >
           <a
-            href="https://app.slidenator.com"
+            href="https://app.slidenator.com/login"
             className="btn-shine rounded-xl bg-neon px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a617c]"
           >
             Começar agora
@@ -165,7 +174,7 @@ export default function Hero() {
           </a>
         </motion.div>
 
-        {/* Scroll indicator */}
+        {/* Indicador de scroll */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -177,7 +186,7 @@ export default function Hero() {
         </motion.div>
       </div>
 
-      {/* Stats strip */}
+      {/* Faixa de números */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -186,8 +195,8 @@ export default function Hero() {
       >
         {[
           { label: "formato", value: "16:9 · HTML" },
-          { label: "interações", value: "clicáveis" },
-          { label: "entrega", value: "link direto" },
+          { label: "geração", value: "~9s" },
+          { label: "acompanhe", value: "ao vivo" },
           { label: "edição", value: "pelo chat" },
         ].map((item) => (
           <div key={item.label} className="bg-deep/80 px-6 py-5 text-center backdrop-blur">

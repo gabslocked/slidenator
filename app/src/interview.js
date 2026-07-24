@@ -70,9 +70,19 @@ export const INTERVIEW_TOOLS = [
 /**
  * Um turno da entrevista (loop de ferramentas provider-agnóstico).
  * ctx: { brand, deck: {id,title,version}|null }
- * hooks: { updateBrand(input)→brand, startGeneration(input)→jobId, startEdit(input)→jobId }
+ * hooks: {
+ *   updateBrand(input) → brand,
+ *   startGeneration(input) → { jobId } | { error },   // {error}: já há job ativo
+ *   startEdit(input)       → { jobId } | { error },
+ * }
+ * stream (opcional): {
+ *   onToken(text),          // deltas de texto do assistente (streaming SSE)
+ *   onEvent(evt),           // eventos do contrato: {type:'tool'|'deck_job',...}
+ * }
  */
-export async function interviewTurn(messages, ctx, hooks) {
+export async function interviewTurn(messages, ctx, hooks, stream = {}) {
+  const onToken = stream.onToken;
+  const onEvent = stream.onEvent || (() => {});
   const brandView = { ...(ctx.brand || {}) };
   if (brandView.logo) brandView.logo = '(logo já enviado)';
   const system =
@@ -93,21 +103,31 @@ export async function interviewTurn(messages, ctx, hooks) {
     tools: INTERVIEW_TOOLS,
     maxTokens: 4000,
     maxIters: 5,
+    onToken,
     onTool: (name, input) => {
       if (name === 'update_brand') {
         const next = hooks.updateBrand(input);
         const view = { ...next };
         if (view.logo) view.logo = '(logo presente)';
+        onEvent({ type: 'tool', name, summary: 'Identidade visual atualizada' });
         return 'Kit atualizado: ' + JSON.stringify(view);
       }
       if (name === 'start_generation') {
-        jobId = hooks.startGeneration(input);
+        const r = hooks.startGeneration(input);
+        if (r && r.error) return r.error;
+        jobId = r.jobId;
         jobKind = 'generate';
+        onEvent({ type: 'tool', name, summary: 'Geração iniciada' });
+        onEvent({ type: 'deck_job', jobId, deckId: null, mode: 'generate' });
         return 'Geração iniciada. Avise que o progresso aparece no chat.';
       }
       if (name === 'edit_deck') {
-        jobId = hooks.startEdit(input);
+        const r = hooks.startEdit(input);
+        if (r && r.error) return r.error;
+        jobId = r.jobId;
         jobKind = 'edit';
+        onEvent({ type: 'tool', name, summary: 'Edição iniciada' });
+        onEvent({ type: 'deck_job', jobId, deckId: ctx.deck ? ctx.deck.id : null, mode: 'edit' });
         return 'Edição iniciada. Avise que o progresso aparece no chat.';
       }
       return 'ferramenta desconhecida';

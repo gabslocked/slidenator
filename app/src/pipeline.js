@@ -30,7 +30,7 @@ function docsBlock(docs) {
  * brandKit: kit de identidade da organização (tema + nome + tom).
  */
 export async function runPipeline(input, brandKit, emit) {
-  const { topic, audience, instructions, docs, slideCount } = input;
+  const { topic, audience, instructions, docs, slideCount, onOutline, onSlide } = input;
   const kit = brandKit || {};
 
   /* ---------- 1 · Roteirista ---------- */
@@ -55,6 +55,7 @@ export async function runPipeline(input, brandKit, emit) {
   emit('roteiro', `Roteiro pronto: "${outline.title}" com ${outline.slides.length} slides`, {
     slides: outline.slides.map((s) => s.title),
   });
+  if (onOutline) onOutline(outline);
 
   /* ---------- 2+3 · Diretor visual ∥ Engenheiro de interação (paralelo) ---------- */
   emit('design', 'Diretor visual e engenheiro de interação trabalhando em paralelo…');
@@ -86,7 +87,9 @@ export async function runPipeline(input, brandKit, emit) {
     all_slides: outline.slides.map((s, i) => `${i + 1}. ${s.title}`),
   };
 
+  const total = outline.slides.length;
   const slides = await mapLimit(outline.slides, BUILD_CONCURRENCY, async (slide, i) => {
+    if (onSlide) onSlide(null, i, total, 'building');
     const spec = {
       posicao: `slide ${i + 1} de ${outline.slides.length}`,
       contexto_do_deck: deckContext,
@@ -105,6 +108,7 @@ export async function runPipeline(input, brandKit, emit) {
       const issues = validateSlide(built);
       if (!issues.length) break;
       emit('construcao', `Slide ${i + 1} ("${slide.title}"): corrigindo ${issues.length} problema(s)…`, { issues });
+      if (onSlide) onSlide(null, i, total, 'fixing');
       built = await aiJSON({ role: 'pipeline',
         system: REVISOR_SYSTEM,
         user: [
@@ -121,6 +125,7 @@ export async function runPipeline(input, brandKit, emit) {
     const finalIssues = validateSlide(built);
     emit('construcao', `Slide ${i + 1}/${outline.slides.length} pronto: "${slide.title}"${finalIssues.length ? ` (com ${finalIssues.length} aviso(s))` : ''}`,
       finalIssues.length ? { issues: finalIssues } : undefined);
+    if (onSlide) onSlide(built, i, total, 'done');
     return built;
   });
 

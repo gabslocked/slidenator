@@ -243,3 +243,93 @@ body {
 .typing-dot:nth-child(3) {
   animation-delay: 0.3s;
 }
+
+/*
+  Split-view do ProductWindow — a "tela dividindo" é uma transição CSS
+  em grid-template (fr interpolável). Altura externa fica travada; só as
+  colunas/linhas internas animam, então nada na página redimensiona.
+*/
+.split-grid {
+  transition:
+    grid-template-columns 0.85s cubic-bezier(0.65, 0, 0.35, 1),
+    grid-template-rows 0.85s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* Skeleton de slide "construindo" — varredura sóbria, sem neon */
+@keyframes slide-shimmer {
+  0% {
+    background-position: -160% 0;
+  }
+  100% {
+    background-position: 160% 0;
+  }
+}
+.slide-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(58, 77, 104, 0.1) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: slide-shimmer 1.5s linear infinite;
+}
+
+/* Barra de progresso viva na timeline de agents */
+@keyframes rail-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Ponteiro do cronômetro — varredura contínua da seção de velocidade */
+@keyframes sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-sweep {
+  animation: sweep 2.4s linear infinite;
+}
+
+/* Halo pulsante discreto (indicador "ao vivo" do visualizador) */
+@keyframes live-halo {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
+.live-halo {
+  animation: live-halo 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-float,
+  .animate-scroll-hint,
+  .pulse-dot,
+  .caret::after,
+  .typing-dot,
+  .slide-shimmer,
+  .animate-sweep,
+  .live-halo {
+    animation: none !important;
+  }
+  .split-grid {
+    transition: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

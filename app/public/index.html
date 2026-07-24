@@ -36,18 +36,41 @@
       <button id="deckPillOpen" class="deck-pill-open" type="button" title="Abrir deck">↗</button>
     </div>
     <button id="expandBtn" class="icon-btn floating" title="abrir menu" hidden>☰</button>
-    <div id="chatScroll">
-      <div id="chatCol"></div>
+
+    <div id="workspace">
+      <div id="chatPane">
+        <div id="chatScroll">
+          <div id="chatCol" role="log" aria-live="polite" aria-relevant="additions text"></div>
+        </div>
+        <div id="composerWrap">
+          <div id="fileChips"></div>
+          <form id="chatForm">
+            <button type="button" id="attachBtn" title="anexar logo ou documentos">＋</button>
+            <input id="chatInput" type="text" autocomplete="off" placeholder="Descreva a apresentação que você precisa…">
+            <button id="chatSend" type="submit" title="enviar">↑</button>
+          </form>
+          <p class="foot">Arraste o logo e documentos para o chat</p>
+        </div>
+      </div>
+
+      <aside id="viewer" aria-label="Visualizador ao vivo">
+        <div class="viewer-head">
+          <div class="viewer-head-main">
+            <span id="viewerTitle" class="viewer-title">Prévia ao vivo</span>
+            <span id="viewerBadge" class="viewer-badge"></span>
+          </div>
+          <button id="viewerClose" class="icon-btn" type="button" title="fechar visualizador">✕</button>
+        </div>
+        <div class="viewer-stage">
+          <iframe id="viewerFrame" class="viewer-frame" title="Prévia do deck" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+        <div class="viewer-timeline">
+          <p class="viewer-timeline-label">Agentes</p>
+          <div id="viewerTimeline" class="timeline-feed" aria-live="polite"></div>
+        </div>
+      </aside>
     </div>
-    <div id="composerWrap">
-      <div id="fileChips"></div>
-      <form id="chatForm">
-        <button type="button" id="attachBtn" title="anexar logo ou documentos">＋</button>
-        <input id="chatInput" type="text" autocomplete="off" placeholder="Descreva a apresentação que você precisa…">
-        <button id="chatSend" type="submit" title="enviar">↑</button>
-      </form>
-      <p class="foot">Arraste o logo e documentos para o chat</p>
-    </div>
+
     <div id="dropHint">Solte aqui — logo (imagem) ou documentos (.md .txt .csv)</div>
     <input id="chatFiles" type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/svg+xml,.md,.txt,.markdown,.csv,.json">
   </main>
@@ -95,6 +118,8 @@
   <button id="saveSettings" class="btn-dark">Salvar</button>
 </dialog>
 
+<script src="/public/vendor/marked.min.js"></script>
+<script src="/public/vendor/purify.min.js"></script>
 <script src="/public/app.js"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@ const PLANS = [
     tagline: "Para quem cria sozinho",
     price: "Em breve",
     cta: "Entrar na lista",
-    ctaHref: "https://app.slidenator.com",
+    ctaHref: "https://app.slidenator.com/login",
     featured: false,
     bullets: [
       "1 usuário",
@@ -22,7 +22,7 @@ const PLANS = [
     tagline: "Para equipes e agências",
     price: "Sob consulta",
     cta: "Falar com a equipe",
-    ctaHref: "https://app.slidenator.com",
+    ctaHref: "mailto:contato@slidenator.com",
     featured: true,
     bullets: [
       "Organização compartilhada",
@@ -129,7 +129,7 @@ export default function Pricing() {
 
       <Reveal delay={0.2}>
         <p className="mt-10 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-dim">
-          Sem cartão de crédito para explorar · migração assistida incluída no Teams e Enterprise
+          Preços em definição · migração assistida incluída no Teams e Enterprise
         </p>
       </Reveal>
     </section>
