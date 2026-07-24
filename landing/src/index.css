@@ -1,0 +1,245 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+
+/*
+  Slidenator landing — identidade "editorial sólido" (mesma do ImobSight).
+  Paper-white quente; .scope-dark re-tematiza seções inteiras (hero, CTA).
+  Três vozes: Instrument Sans (display, sóbria), Geist (UI), Geist Mono (dados/kickers).
+  Cor de marca: #6d5ae0 (claro) / #a99cff (escuro).
+*/
+@theme {
+  --color-void: #f7f7f5;
+  --color-deep: #efefec;
+  --color-panel: #ffffff;
+  --color-ink: #171716;
+  --color-mut: #55555a;
+  --color-dim: #8b8b90;
+  --color-hair: rgba(23, 23, 22, 0.09);
+  --color-neon: #6d5ae0;
+  --color-viol: #8d6fdd;
+  --color-cyan: #2f9dc4;
+  --color-mint: #2f9e6e;
+
+  --font-display: "Instrument Sans", "Geist", sans-serif;
+  --font-body: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(109, 90, 224, 0.25);
+}
+
+/* Grain sutil por cima de tudo */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.026;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Voz display — Instrument Sans, sóbria e discreta; ênfase por cor + peso */
+.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.display em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--color-neon);
+}
+.scope-dark .display em {
+  color: #a99cff;
+}
+
+/* Kicker mono — microlabel de seção */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+}
+
+/* Ticks de canto — detalhe arquitetônico */
+.corner-ticks {
+  position: relative;
+}
+.corner-ticks::before,
+.corner-ticks::after {
+  content: "+";
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-dim);
+  opacity: 0.7;
+  z-index: 1;
+}
+.corner-ticks::before {
+  top: 10px;
+  left: 12px;
+}
+.corner-ticks::after {
+  bottom: 10px;
+  right: 12px;
+}
+
+/* Vidro — apenas chrome flutuante (nav, chips sobre hero) */
+.glass {
+  background: color-mix(in srgb, var(--color-panel) 78%, transparent);
+  border: 1px solid var(--color-hair);
+  backdrop-filter: blur(12px) saturate(1.1);
+}
+
+/*
+  Escopo escuro — seções que contrastam com o restante paper.
+  Tudo dentro de .scope-dark resolve para o tema escuro.
+*/
+.scope-dark {
+  --color-void: #0b0b0e;
+  --color-deep: #131318;
+  --color-panel: #17171d;
+  --color-ink: #f2f2f0;
+  --color-mut: #a3a3ab;
+  --color-dim: #6b6b74;
+  --color-hair: rgba(255, 255, 255, 0.09);
+  --color-neon: #a99cff;
+  --color-viol: #ab8ef5;
+  --color-cyan: #5fc0e8;
+  --color-mint: #46d09a;
+  background: var(--color-void);
+  color: var(--color-ink);
+}
+
+/* Marquee */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee 32s linear infinite;
+}
+
+/* Flutuação suave */
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+.animate-float {
+  animation: float-y 5.5s ease-in-out infinite;
+}
+
+/* Varredura de brilho no CTA primário */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  inset: -40% auto;
+  left: -60%;
+  width: 40%;
+  transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.6s ease;
+}
+.btn-shine:hover::after {
+  left: 130%;
+}
+
+/* Indicador de scroll */
+@keyframes scroll-hint {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(6px);
+    opacity: 0.4;
+  }
+}
+.animate-scroll-hint {
+  animation: scroll-hint 1.8s ease-in-out infinite;
+}
+
+/* Pulso de status */
+@keyframes ping-soft {
+  0% {
+    box-shadow: 0 0 0 0 rgba(46, 208, 110, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(46, 208, 110, 0);
+  }
+}
+.pulse-dot {
+  animation: ping-soft 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Cursor-fantasma piscando (typewriter) */
+@keyframes caret-blink {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0;
+  }
+}
+.caret::after {
+  content: "▍";
+  margin-left: 1px;
+  color: var(--color-neon);
+  animation: caret-blink 0.9s steps(1) infinite;
+}
+
+/* Dots de "digitando…" */
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+.typing-dot {
+  animation: typing-dot 1.1s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
