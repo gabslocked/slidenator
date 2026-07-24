@@ -178,8 +178,5 @@ $('registerForm').onsubmit = (ev) => {
 /* já logado? vai direto para o app */
 fetch('/api/me').then((r) => { if (r.ok) location.href = '/'; }).catch(() => {});
 </script>
-<!-- impeccable-live-start -->
-<script src="http://localhost:8400/live.js"></script>
-<!-- impeccable-live-end -->
 </body>
 </html>
