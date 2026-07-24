@@ -156,8 +156,11 @@ function toOpenAIHistory(system, messages) {
   return out;
 }
 
-async function openaiComplete(p, { model, messages, tools, maxTokens }) {
-  const body = { model, max_tokens: maxTokens, messages };
+async function openaiComplete(p, { model, messages, tools, maxTokens, schema }) {
+  const body = { model, messages };
+  if (schema) {
+    body.response_format = { type: 'json_schema', json_schema: { name: 'saida', strict: true, schema } };
+  }
   if (tools) {
     body.tools = tools.map((t) => ({
       type: 'function',
@@ -165,7 +168,9 @@ async function openaiComplete(p, { model, messages, tools, maxTokens }) {
     }));
   }
   let lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  let budget = maxTokens;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    body.max_tokens = budget;
     const res = await fetch(p.baseURL + '/chat/completions', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + p.key, 'Content-Type': 'application/json' },
@@ -174,7 +179,17 @@ async function openaiComplete(p, { model, messages, tools, maxTokens }) {
     });
     if (res.ok) {
       const data = await res.json();
-      return data.choices[0].message;
+      const choice = data.choices[0];
+      // modelos pensantes (ex.: GLM) gastam o orçamento no raciocínio antes do
+      // conteúdo — se truncou, amplia o orçamento e tenta de novo (até 4×)
+      if (choice.finish_reason === 'length' && budget < maxTokens * 4) {
+        budget *= 2;
+        continue;
+      }
+      if (choice.finish_reason === 'length') {
+        throw new Error('Resposta truncada mesmo após ampliar max_tokens para ' + budget);
+      }
+      return choice.message;
     }
     const errText = await res.text().catch(() => '');
     lastErr = new Error(`Cerebras ${res.status}: ${errText.slice(0, 200)}`);
@@ -234,12 +249,24 @@ export async function aiText({ role, system, user, maxTokens = 8000 }) {
 export async function aiJSON({ role, system, user, schema, maxTokens = 32000 }) {
   const p = resolveRole(role);
   if (p.style === 'openai') {
-    const msg = await openaiComplete(p, {
-      model: p.model,
-      messages: [{ role: 'system', content: system + SCHEMA_SUFFIX(schema) }, { role: 'user', content: user }],
-      maxTokens,
-    });
-    return extractJSON(msg.content || '');
+    try {
+      const msg = await openaiComplete(p, {
+        model: p.model,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        maxTokens,
+        schema,
+      });
+      return extractJSON(msg.content || '');
+    } catch (e) {
+      // schema recusado pelo servidor → volta ao modo schema-no-prompt
+      if (!/response_format|json_schema|schema/i.test(e.message)) throw e;
+      const msg = await openaiComplete(p, {
+        model: p.model,
+        messages: [{ role: 'system', content: system + SCHEMA_SUFFIX(schema) }, { role: 'user', content: user }],
+        maxTokens,
+      });
+      return extractJSON(msg.content || '');
+    }
   }
   if (p.native) {
     const client = anthropicClient(p);
