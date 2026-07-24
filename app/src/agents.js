@@ -36,8 +36,9 @@ const PROVIDERS = {
     style: 'openai',
     baseURL: 'https://api.cerebras.ai/v1',
     keys: ['CEREBRAS_API_KEY'],
-    // gpt-oss-120b: barato/rápido com tool calls sólidos; zai-glm-4.7: forte em HTML/código
-    defaults: { chat: 'gpt-oss-120b', pipeline: 'zai-glm-4.7' },
+    // gpt-oss-120b em tudo: ~4× mais rápido e ~20× mais barato que o zai-glm-4.7
+    // (que gasta o dobro de tokens em raciocínio e sai do ar na Cerebras em 17/08/2026)
+    defaults: { chat: 'gpt-oss-120b', pipeline: 'gpt-oss-120b' },
   },
 };
 
@@ -156,6 +157,17 @@ function toOpenAIHistory(system, messages) {
   return out;
 }
 
+/** Tokens acumulados por modelo no processo — { modelo: { in, out, calls } }. */
+export const usageByModel = {};
+
+function tallyUsage(model, usage) {
+  if (!usage) return;
+  const u = (usageByModel[model] ||= { in: 0, out: 0, calls: 0 });
+  u.in += usage.prompt_tokens ?? usage.input_tokens ?? 0;
+  u.out += usage.completion_tokens ?? usage.output_tokens ?? 0;
+  u.calls += 1;
+}
+
 async function openaiComplete(p, { model, messages, tools, maxTokens, schema }) {
   const body = { model, messages };
   if (schema) {
@@ -179,6 +191,7 @@ async function openaiComplete(p, { model, messages, tools, maxTokens, schema }) 
     });
     if (res.ok) {
       const data = await res.json();
+      tallyUsage(model, data.usage);
       const choice = data.choices[0];
       // modelos pensantes (ex.: GLM) gastam o orçamento no raciocínio antes do
       // conteúdo — se truncou, amplia o orçamento e tenta de novo (até 4×)
