@@ -36,8 +36,8 @@ const STAGE_ICON = { roteiro: '✍︎', design: '◫', construcao: '⚙', 'const
 const PLACEHOLDERS = {
   briefing: 'Descreva a apresentação que você precisa…',
   generating: 'Pode continuar conversando enquanto eu gero…',
-  editing: 'Peça qualquer ajuste no deck…',
-  ready: 'Peça qualquer ajuste no deck…',
+  editing: 'Peça qualquer ajuste na apresentação…',
+  ready: 'Peça qualquer ajuste na apresentação…',
 };
 
 async function api(path, opts) {
@@ -330,9 +330,9 @@ function cardError(msg) {
 }
 
 /* ================= visualizador ao vivo (split view, contrato §5) ================= */
-function showViewer() { hasViewer = true; main.classList.add('split'); viewerOpen = true; updateDeckPill(); }
+function showViewer() { hasViewer = true; main.classList.add('split'); viewerOpen = true; updateViewerTab(); }
 function openViewer() { showViewer(); }
-function closeViewer() { viewerOpen = false; main.classList.remove('split'); updateDeckPill(); }
+function closeViewer() { viewerOpen = false; main.classList.remove('split'); updateViewerTab(); }
 
 function setViewerTitle(t) { $('viewerTitle').textContent = t || 'Prévia ao vivo'; }
 function setViewerBadge() {
@@ -465,38 +465,36 @@ function handleDeckJob(jobId, deckId, mode) {
   showViewer();
 }
 
-/* ================= deck flutuante (atalho para reabrir o viewer) ================= */
+/* ================= aba lateral (atalho para reabrir o visualizador) ================= */
 function latestDeck() {
   if (!currentDecks || !currentDecks.length) return null;
   return [...currentDecks].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0];
 }
 
-function updateDeckPill() {
-  const pill = $('deckPill');
-  const spinner = $('deckPillSpinner');
-  const text = $('deckPillText');
-  const openBtn = $('deckPillOpen');
+function updateViewerTab() {
+  const tab = $('viewerTab');
+  const spinner = $('viewerTabSpinner');
+  const text = $('viewerTabText');
   const generating = convState === 'generating' || convState === 'editing';
-
-  if (generating) {
-    pill.hidden = false;
-    spinner.hidden = false;
-    text.textContent = viewerOpen ? 'gerando…' : 'gerando — ver ao vivo';
-    openBtn.hidden = true;
-    pill.classList.toggle('clickable', !viewerOpen);
-    pill.onclick = () => { if (!viewerOpen && currentJobId) openViewer(); };
-    return;
-  }
-
-  spinner.hidden = true;
   const deck = latestDeck();
-  if (!deck) { pill.hidden = true; pill.onclick = null; pill.classList.remove('clickable'); return; }
-  pill.hidden = false;
-  text.textContent = `🎞 ${deck.title || 'Deck'} · v${deck.version || 1}`;
-  openBtn.hidden = false;
-  openBtn.onclick = (e) => { e.stopPropagation(); window.open('/deck/' + deck.id, '_blank'); };
-  pill.classList.toggle('clickable', hasViewer && !viewerOpen);
-  pill.onclick = () => { if (hasViewer && !viewerOpen) { loadDeckIntoViewer(deck); showViewer(); } };
+
+  /* botão ↗ do cabeçalho do viewer: abre a versão definitiva em nova aba */
+  const ext = $('viewerOpenExt');
+  ext.hidden = !deck;
+  ext.onclick = deck ? () => window.open('/deck/' + deck.id, '_blank') : null;
+
+  /* a aba só existe quando o visualizador está fechado e há algo para ver */
+  if (viewerOpen || (!generating && !deck)) { tab.hidden = true; tab.onclick = null; return; }
+
+  tab.hidden = false;
+  spinner.hidden = !generating;
+  if (generating) {
+    text.textContent = 'gerando — acompanhar ao vivo';
+    tab.onclick = () => { if (currentJobId) openViewer(); };
+  } else {
+    text.textContent = `◫ ${deck.title || 'Apresentação'} · v${deck.version || 1}`;
+    tab.onclick = () => { loadDeckIntoViewer(deck); showViewer(); };
+  }
 }
 
 $('viewerClose').onclick = closeViewer;
@@ -542,7 +540,7 @@ async function ingestLogoFile(f, announce = true) {
   }
   if (!announce) return;
   const note = `(Anexei o logo "${f.name}".` +
-    (palette.length ? ` A paleta extraída dele foi: ${palette.join(', ')}. Me proponha uma combinação de cores para o deck.)` : ')');
+    (palette.length ? ` A paleta extraída dele foi: ${palette.join(', ')}. Me proponha uma combinação de cores para a apresentação.)` : ')');
   const blocks = [];
   if (f.type !== 'image/svg+xml') blocks.push({ type: 'image', source: { type: 'base64', media_type: f.type, data: dataUri.split(',')[1] } });
   blocks.push({ type: 'text', text: note });
@@ -620,14 +618,14 @@ async function selectConversation(id) {
       startJobStream(conv.jobId);
       showViewer();
     } else if (state === 'ready') {
-      hasViewer = true;   // pill pode reabrir o viewer com o deck final
+      hasViewer = true;   // a aba lateral pode reabrir o visualizador com a versão final
     }
   } catch (e) {
     currentDecks = [];
     setConvState('briefing');
     row('sys', '⚠ ' + escHtml(e.message));
   }
-  updateDeckPill();
+  updateViewerTab();
 }
 
 async function reloadConversationMeta() {
@@ -637,7 +635,7 @@ async function reloadConversationMeta() {
     currentDecks = conv.decks || [];
     if (conv.deckId) currentDeckId = conv.deckId;
     else { const d = latestDeck(); if (d) currentDeckId = d.id; }
-    updateDeckPill();
+    updateViewerTab();
   } catch {}
   loadConversations();
 }

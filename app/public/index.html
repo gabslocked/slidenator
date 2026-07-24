@@ -30,11 +30,10 @@
     </aside>
 
   <main id="main">
-    <div id="deckPill" class="deck-pill" hidden>
-      <span id="deckPillSpinner" class="spinner" hidden></span>
-      <span id="deckPillText" class="deck-pill-text"></span>
-      <button id="deckPillOpen" class="deck-pill-open" type="button" title="Abrir deck">↗</button>
-    </div>
+    <button id="viewerTab" class="viewer-tab" type="button" hidden>
+      <span id="viewerTabSpinner" class="spinner" hidden></span>
+      <span id="viewerTabText"></span>
+    </button>
     <button id="expandBtn" class="icon-btn floating" title="abrir menu" hidden>☰</button>
 
     <div id="workspace">
@@ -59,10 +58,11 @@
             <span id="viewerTitle" class="viewer-title">Prévia ao vivo</span>
             <span id="viewerBadge" class="viewer-badge"></span>
           </div>
+          <button id="viewerOpenExt" class="icon-btn" type="button" title="abrir em nova aba" hidden>↗</button>
           <button id="viewerClose" class="icon-btn" type="button" title="fechar visualizador">✕</button>
         </div>
         <div class="viewer-stage">
-          <iframe id="viewerFrame" class="viewer-frame" title="Prévia do deck" sandbox="allow-scripts allow-same-origin"></iframe>
+          <iframe id="viewerFrame" class="viewer-frame" title="Prévia da apresentação" sandbox="allow-scripts allow-same-origin"></iframe>
         </div>
         <div class="viewer-timeline">
           <p class="viewer-timeline-label">Agentes</p>
