@@ -1,4 +1,4 @@
-import { makeClient, callJSON, mapLimit } from './agents.js';
+import { aiJSON, mapLimit } from './agents.js';
 import { assemble } from './assemble.js';
 import { validateSlide, validateDeck } from './validate.js';
 import { DESIGN_SYSTEM, REVISOR_SYSTEM, BUILD_SCHEMA } from './prompts.js';
@@ -43,7 +43,6 @@ Regras:
  * Retorna { slides, html, summary }.
  */
 export async function runEditPipeline({ deck, instructions, brandKit }, emit) {
-  const client = makeClient();
   const kit = brandKit || {};
 
   emit('edicao', 'Editor analisando o deck e aplicando as mudanças…');
@@ -51,7 +50,7 @@ export async function runEditPipeline({ deck, instructions, brandKit }, emit) {
     .map((s, i) => `### SLIDE ${i} — html:\n${s.html}\n### SLIDE ${i} — js:\n${s.js || '(estático)'}`)
     .join('\n\n');
 
-  const result = await callJSON(client, {
+  const result = await aiJSON({ role: 'pipeline',
     system: EDITOR_SYSTEM,
     user: [
       `## Título do deck\n${deck.title}`,
@@ -78,7 +77,7 @@ export async function runEditPipeline({ deck, instructions, brandKit }, emit) {
       const issues = validateSlide(slides[idx]);
       if (!issues.length) return;
       emit('edicao', `Slide ${idx + 1}: corrigindo ${issues.length} problema(s)…`, { issues });
-      slides[idx] = await callJSON(client, {
+      slides[idx] = await aiJSON({ role: 'pipeline',
         system: REVISOR_SYSTEM,
         user: [
           `## HTML atual\n${slides[idx].html}`,

@@ -1,4 +1,4 @@
-import { makeClient, callJSON, mapLimit } from './agents.js';
+import { aiJSON, mapLimit } from './agents.js';
 import { assemble } from './assemble.js';
 import { validateSlide, validateDeck } from './validate.js';
 import {
@@ -31,7 +31,6 @@ function docsBlock(docs) {
  */
 export async function runPipeline(input, brandKit, emit) {
   const { topic, audience, instructions, docs, slideCount } = input;
-  const client = makeClient();
   const kit = brandKit || {};
 
   /* ---------- 1 · Roteirista ---------- */
@@ -40,7 +39,7 @@ export async function runPipeline(input, brandKit, emit) {
     kit.name ? `Nome da marca/empresa: ${kit.name} (use no badge da capa e no campo brand)` : '',
     kit.tone ? `Tom de voz da marca: ${kit.tone}` : '',
   ].filter(Boolean).join('\n');
-  const outline = await callJSON(client, {
+  const outline = await aiJSON({ role: 'pipeline',
     system: ROTEIRISTA_SYSTEM,
     user: [
       `## Tópico\n${topic}`,
@@ -61,13 +60,13 @@ export async function runPipeline(input, brandKit, emit) {
   emit('design', 'Diretor visual e engenheiro de interação trabalhando em paralelo…');
   const outlineJson = JSON.stringify(outline, null, 2);
   const [visual, interaction] = await Promise.all([
-    callJSON(client, {
+    aiJSON({ role: 'pipeline',
       system: DIRETOR_SYSTEM,
       user: `## Roteiro do deck\n${outlineJson}`,
       schema: VISUAL_SCHEMA,
       maxTokens: 20000,
     }),
-    callJSON(client, {
+    aiJSON({ role: 'pipeline',
       system: INTERACAO_SYSTEM,
       user: `## Roteiro do deck\n${outlineJson}\n\n(Defina as interações a partir do roteiro; o layout detalhado está sendo feito em paralelo — indique elementos e comportamento de forma auto-contida.)`,
       schema: INTERACTION_SCHEMA,
@@ -95,7 +94,7 @@ export async function runPipeline(input, brandKit, emit) {
       visual: visualById.get(slide.id) || null,
       interacao: interById.get(slide.id) || { demo: '', pattern: 'none', behavior: '', elements: [] },
     };
-    let built = await callJSON(client, {
+    let built = await aiJSON({ role: 'pipeline',
       system: CONSTRUTOR_SYSTEM,
       user: `## Especificação do slide\n${JSON.stringify(spec, null, 2)}`,
       schema: BUILD_SCHEMA,
@@ -106,7 +105,7 @@ export async function runPipeline(input, brandKit, emit) {
       const issues = validateSlide(built);
       if (!issues.length) break;
       emit('construcao', `Slide ${i + 1} ("${slide.title}"): corrigindo ${issues.length} problema(s)…`, { issues });
-      built = await callJSON(client, {
+      built = await aiJSON({ role: 'pipeline',
         system: REVISOR_SYSTEM,
         user: [
           `## Especificação original do slide\n${JSON.stringify(spec, null, 2)}`,
