@@ -1,7 +1,10 @@
-import { motion } from "framer-motion";
+import { lazy, Suspense } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+
+const SlideField = lazy(() => import("../three/SlideField"));
 
 const WORDS_1 = ["Converse."];
-const WORDS_2 = ["Sua", "apresentação", "nasce", "viva."];
+const WORDS_2 = ["Seus", "slides", "nascem", "vivos."];
 
 function Word({ word, delay }: { word: string; delay: number }) {
   return (
@@ -17,15 +20,26 @@ function Word({ word, delay }: { word: string; delay: number }) {
 }
 
 export default function Hero() {
+  const reduced = useReducedMotion() ?? false;
+
   return (
     <section className="scope-dark corner-ticks relative flex min-h-dvh flex-col justify-end overflow-hidden">
-      {/* Grade sutil mascarada */}
+      {/* three.js scene — blueprint slide frames floating in depth */}
+      {!reduced && (
+        <div className="pointer-events-none absolute inset-0 opacity-45">
+          <Suspense fallback={null}>
+            <SlideField tone="#a8b8d4" />
+          </Suspense>
+        </div>
+      )}
+
+      {/* Grid overlay */}
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(60%_60%_at_50%_50%,black,transparent)]" />
-      {/* Vinheta radial */}
+      {/* Radial vignette */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_55%_at_50%_42%,transparent_0%,#0b0b0e_92%)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#0b0b0e] to-transparent" />
 
-      {/* Chip esquerdo — agente concluiu */}
+      {/* Chip left — script agent done */}
       <motion.div
         initial={{ opacity: 0, x: -24 }}
         animate={{ opacity: 1, x: 0 }}
@@ -39,7 +53,7 @@ export default function Hero() {
         </div>
       </motion.div>
 
-      {/* Chip direito superior — deck pronto */}
+      {/* Chip right top — presentation ready */}
       <motion.div
         initial={{ opacity: 0, x: 24 }}
         animate={{ opacity: 1, x: 0 }}
@@ -47,15 +61,28 @@ export default function Hero() {
         className="absolute right-[7%] top-[28%] z-10 hidden lg:block"
       >
         <div className="animate-float glass rounded-xl px-3.5 py-2.5 text-xs [animation-delay:1.2s]">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">Deck pronto</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">
+            Apresentação pronta
+          </p>
           <p className="mt-1 flex items-baseline gap-1.5 font-mono text-sm font-medium tabular-nums text-ink">
-            14 slides
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 self-center text-mint" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+            10 slides
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3 w-3 self-center text-mint"
+              aria-hidden="true"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
           </p>
         </div>
       </motion.div>
 
-      {/* Chip direito inferior — identidade detectada */}
+      {/* Chip right lower — identity detected */}
       <motion.div
         initial={{ opacity: 0, x: 24 }}
         animate={{ opacity: 1, x: 0 }}
@@ -79,7 +106,7 @@ export default function Hero() {
         </div>
       </motion.div>
 
-      {/* Conteúdo central */}
+      {/* Hero content */}
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 pt-32 text-center">
         {/* Kicker badge */}
         <motion.a
@@ -90,18 +117,18 @@ export default function Hero() {
           className="glass group mb-8 flex items-center gap-2.5 rounded-full py-1.5 pl-3 pr-4 font-mono text-[11px] uppercase tracking-[0.14em] text-mut transition-colors hover:text-ink"
         >
           <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-mint" />
-          Apresentações interativas em HTML
+          Apresentações interativas
           <span className="text-dim transition-transform group-hover:translate-x-0.5">→</span>
         </motion.a>
 
-        {/* Headline — palavra por palavra */}
+        {/* Headline — word by word */}
         <h1 className="display max-w-4xl text-[3.2rem] leading-[1.02] md:text-[5rem]">
           <span className="block">
             {WORDS_1.map((w, i) => (
               <Word key={w} word={w} delay={0.45 + i * 0.09} />
             ))}
           </span>
-          <span className="block text-[#a99cff]">
+          <span className="block text-[#a8b8d4]">
             {WORDS_2.map((w, i) => (
               <Word key={w} word={w} delay={0.65 + i * 0.09} />
             ))}
@@ -114,8 +141,8 @@ export default function Hero() {
           transition={{ duration: 0.8, delay: 1.1 }}
           className="mt-7 max-w-xl text-base leading-relaxed text-mut md:text-lg"
         >
-          Um assistente entrevista você, coleta logo e documentos no chat, e uma equipe de
-          agents monta um deck HTML animado — pronto para publicar e editar por conversa.
+          Descreva sua apresentação em chat. Agents cuidam do roteiro, identidade visual e
+          animações — entregam HTML interativo em minutos.
         </motion.p>
 
         <motion.div
@@ -126,7 +153,7 @@ export default function Hero() {
         >
           <a
             href="https://app.slidenator.com"
-            className="btn-shine rounded-xl bg-neon px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#7c6ae8]"
+            className="btn-shine rounded-xl bg-neon px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a617c]"
           >
             Começar agora
           </a>
@@ -138,7 +165,7 @@ export default function Hero() {
           </a>
         </motion.div>
 
-        {/* Indicador de scroll */}
+        {/* Scroll indicator */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -150,7 +177,7 @@ export default function Hero() {
         </motion.div>
       </div>
 
-      {/* Faixa de contexto */}
+      {/* Stats strip */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -165,7 +192,9 @@ export default function Hero() {
         ].map((item) => (
           <div key={item.label} className="bg-deep/80 px-6 py-5 text-center backdrop-blur">
             <p className="text-xl font-semibold tracking-tight">{item.value}</p>
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-dim">{item.label}</p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-dim">
+              {item.label}
+            </p>
           </div>
         ))}
       </motion.div>

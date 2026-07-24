@@ -4,20 +4,20 @@ const STEPS = [
   {
     num: "01",
     title: "Converse",
-    desc: "O assistente entrevista você sobre objetivo, audiência e tom. Você arrasta logo, cores e documentos direto no chat — nenhum formulário, nenhum upload separado.",
-    detail: "Drag-and-drop no chat · Identidade detectada automaticamente",
+    desc: "O assistente entrevista você sobre objetivo, audiência e tom. Arraste o logo direto no chat para detectar a paleta — nenhum formulário, nenhum upload separado.",
+    detail: "Drag-and-drop no chat · Identidade detectada",
   },
   {
     num: "02",
-    title: "Agents montam",
-    desc: "Uma equipe de agents executa em paralelo: roteirista define a narrativa, diretor visual aplica sua identidade, engenheiro de interação cria cliques e animações, revisor valida coerência.",
-    detail: "Roteiro → Layout → Interações → Revisão",
+    title: "Agents executam",
+    desc: "O card de progresso aparece no chat: [roteiro], [design] e [construcao] entram linha a linha. Você acompanha cada etapa — roteirista, diretor visual e revisor em paralelo.",
+    detail: "[roteiro] → [design] → [construcao] → [montagem]",
   },
   {
     num: "03",
-    title: "Edite conversando",
-    desc: "O deck HTML fica vivo no chat. Peça ajustes em linguagem natural — trocar cores, reorganizar slides, mudar o gráfico do slide 4 — e as mudanças se aplicam na hora.",
-    detail: "Edição por mensagem · Histórico de versões",
+    title: "Edite pelo chat",
+    desc: "O pill da apresentação surge no canto superior esquerdo — abra ou peça mudanças em conversa. O pill atualiza de v1 para v2 assim que a edição termina.",
+    detail: "pill v1 → pedido em chat → pill v2",
   },
 ];
 
@@ -27,7 +27,7 @@ export default function HowItWorks() {
       <Reveal className="text-center">
         <p className="kicker text-neon">Como funciona</p>
         <h2 className="display mx-auto mt-4 max-w-2xl text-4xl md:text-[3.4rem] md:leading-[1.05]">
-          Três etapas. <em>Um deck pronto para o mundo.</em>
+          Três etapas. <em>Uma apresentação pronta para o mundo.</em>
         </h2>
         <p className="mx-auto mt-5 max-w-xl text-mut">
           Da conversa ao HTML publicável, sem exportar arquivo nenhum.
@@ -38,12 +38,12 @@ export default function HowItWorks() {
         {STEPS.map((step, i) => (
           <Reveal key={step.num} delay={0.08 + i * 0.07}>
             <div className="group relative flex h-full flex-col rounded-2xl border border-hair bg-panel p-8 transition-colors hover:border-neon/20">
-              {/* Número de passo */}
+              {/* Step number */}
               <span className="font-mono text-[11px] font-medium uppercase tracking-[0.2em] text-neon">
                 {step.num}
               </span>
 
-              {/* Linha conectora (não no último) */}
+              {/* Connector line (not on last card) */}
               {i < STEPS.length - 1 && (
                 <div className="absolute -right-3 top-1/2 hidden -translate-y-1/2 md:block">
                   <div className="h-px w-6 bg-hair" />

@@ -11,7 +11,7 @@ export default function CTA() {
           <p className="kicker text-neon">Comece agora</p>
           <h2 className="display mt-4 text-5xl leading-[1.05] md:text-6xl">
             Converse. <br />
-            <em>Seu deck nasce vivo.</em>
+            <em>Seus slides nascem vivos.</em>
           </h2>
           <p className="mx-auto mt-6 max-w-md text-mut">
             Abra o Slidenator, descreva sua apresentação e veja a equipe de agents trabalhar
@@ -20,7 +20,7 @@ export default function CTA() {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <a
               href="https://app.slidenator.com"
-              className="btn-shine rounded-xl bg-neon px-8 py-4 text-sm font-semibold text-white transition-colors hover:bg-[#7c6ae8]"
+              className="btn-shine rounded-xl bg-neon px-8 py-4 text-sm font-semibold text-white transition-colors hover:bg-[#4a617c]"
             >
               Abrir o Slidenator
             </a>

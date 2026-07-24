@@ -116,7 +116,7 @@ export default function Pricing() {
                 href={plan.ctaHref}
                 className={`mt-10 block rounded-xl py-3 text-center text-sm font-semibold transition-colors ${
                   plan.featured
-                    ? "btn-shine bg-neon text-white hover:bg-[#7c6ae8]"
+                    ? "btn-shine bg-neon text-white hover:bg-[#4a617c]"
                     : "border border-hair bg-deep text-ink hover:border-neon/30 hover:text-neon"
                 }`}
               >

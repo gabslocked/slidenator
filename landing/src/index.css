@@ -15,7 +15,7 @@
   --color-mut: #55555a;
   --color-dim: #8b8b90;
   --color-hair: rgba(23, 23, 22, 0.09);
-  --color-neon: #6d5ae0;
+  --color-neon: #3a4d68;
   --color-viol: #8d6fdd;
   --color-cyan: #2f9dc4;
   --color-mint: #2f9e6e;
@@ -39,7 +39,7 @@ body {
 }
 
 ::selection {
-  background: rgba(109, 90, 224, 0.25);
+  background: rgba(58, 77, 104, 0.25);
 }
 
 /* Grain sutil por cima de tudo */
@@ -65,7 +65,7 @@ body {
   color: var(--color-neon);
 }
 .scope-dark .display em {
-  color: #a99cff;
+  color: #a8b8d4;
 }
 
 /* Kicker mono — microlabel de seção */
@@ -120,7 +120,7 @@ body {
   --color-mut: #a3a3ab;
   --color-dim: #6b6b74;
   --color-hair: rgba(255, 255, 255, 0.09);
-  --color-neon: #a99cff;
+  --color-neon: #a8b8d4;
   --color-viol: #ab8ef5;
   --color-cyan: #5fc0e8;
   --color-mint: #46d09a;

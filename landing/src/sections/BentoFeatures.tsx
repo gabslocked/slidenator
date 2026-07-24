@@ -288,11 +288,12 @@ function SlideDemo() {
 
 /* ─────────────────── d. Equipe de agents ─────────────────── */
 
+// Matches the real app's .progress-card monospace log style
 const AGENT_STEPS = [
-  { label: "Roteirista", detail: "narrativa e estrutura" },
-  { label: "Dir. Visual", detail: "identidade e layout" },
-  { label: "Interações", detail: "cliques e animações" },
-  { label: "Revisor", detail: "coerência e qualidade" },
+  { label: "[roteiro]", detail: "narrativa e estrutura" },
+  { label: "[design]", detail: "identidade visual aplicada" },
+  { label: "[construcao]", detail: "Slide 3/6 pronto…" },
+  { label: "[revisao]", detail: "coerência verificada" },
 ];
 
 function AgentsFeed() {
@@ -306,42 +307,28 @@ function AgentsFeed() {
     }
     const id = setInterval(
       () => setCount((c) => (c >= AGENT_STEPS.length ? 1 : c + 1)),
-      860,
+      900,
     );
     return () => clearInterval(id);
   }, [reduced]);
 
   return (
-    <div className="mt-5 h-[160px] space-y-2 overflow-hidden">
+    <div className="mt-5 h-[160px] overflow-hidden rounded-xl border border-hair bg-deep px-4 py-3 font-mono text-[11.5px] leading-[1.9]">
       <AnimatePresence initial={false}>
         {AGENT_STEPS.slice(0, count).map((step, i) => {
           const done = i < count - 1 || count === AGENT_STEPS.length;
           const active = i === count - 1 && count < AGENT_STEPS.length;
           return (
             <motion.div
-              key={step.label}
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.38, ease: [0.21, 0.6, 0.35, 1] }}
-              className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-xs ${
-                active
-                  ? "border-neon/40 bg-neon/[0.07]"
-                  : "border-hair bg-ink/[0.02]"
-              }`}
+              key={step.label + i}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, ease: [0.21, 0.6, 0.35, 1] }}
             >
-              {active ? (
-                <span className="pulse-dot h-1.5 w-1.5 shrink-0 rounded-full bg-mint" />
-              ) : (
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neon/25" />
-              )}
-              <span className="font-medium">{step.label}</span>
-              <span className="text-[10px] text-dim">{step.detail}</span>
-              {done && (
-                <span className="ml-auto font-mono text-[10px] text-mint">✓</span>
-              )}
-              {active && (
-                <span className="ml-auto font-mono text-[10px] text-dim">em progresso</span>
-              )}
+              <span className="font-bold text-neon">{step.label}</span>{" "}
+              <span className="text-dim">{step.detail}</span>
+              {done && <span className="text-mint"> ✓</span>}
+              {active && <span className="text-dim"> em progresso</span>}
             </motion.div>
           );
         })}
@@ -440,9 +427,9 @@ function MultiTenantDemo() {
           <motion.span
             key={tier}
             animate={{
-              borderColor: i === active ? "rgba(109,90,224,0.6)" : "rgba(23,23,22,0.09)",
-              color: i === active ? "#6d5ae0" : "#8b8b90",
-              backgroundColor: i === active ? "rgba(109,90,224,0.07)" : "transparent",
+              borderColor: i === active ? "rgba(58,77,104,0.6)" : "rgba(23,23,22,0.09)",
+              color: i === active ? "#3a4d68" : "#8b8b90",
+              backgroundColor: i === active ? "rgba(58,77,104,0.07)" : "transparent",
             }}
             transition={{ duration: 0.28 }}
             className="cursor-default rounded-full border px-4 py-1.5 font-mono text-xs"
@@ -468,7 +455,7 @@ export default function BentoFeatures() {
       <Reveal className="text-center">
         <p className="kicker text-neon">Recursos</p>
         <h2 className="display mx-auto mt-4 max-w-2xl text-4xl md:text-[3.4rem] md:leading-[1.05]">
-          Tudo que o deck precisa. <em>Nada que atrapalhe.</em>
+          Tudo que a apresentação precisa. <em>Nada que atrapalhe.</em>
         </h2>
       </Reveal>
 
@@ -526,7 +513,7 @@ export default function BentoFeatures() {
             <CardTitle
               kicker="Edição por conversa"
               title="Mude o que quiser pelo chat"
-              desc="Nenhum editor visual. Só conversa — e o slide muda na hora."
+              desc="Peça mudanças em linguagem natural. O pill da apresentação atualiza de v1 para v2 quando a edição termina."
             />
             <EditDemo />
           </CardShell>
