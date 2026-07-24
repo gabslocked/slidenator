@@ -1,0 +1,71 @@
+{
+  "updatedAt": "2026-07-24T19:09:29.976Z",
+  "missions": [
+    {
+      "id": "session:5f8e472f-7751-47f1-aedb-913a5e15c782:none",
+      "source": "session",
+      "name": "none",
+      "objective": "Session mission",
+      "createdAt": "2026-07-24T16:34:57.443Z",
+      "updatedAt": "2026-07-24T19:09:29.976Z",
+      "status": "running",
+      "workerCount": 2,
+      "taskCounts": {
+        "total": 2,
+        "pending": 0,
+        "blocked": 0,
+        "inProgress": 1,
+        "completed": 1,
+        "failed": 0
+      },
+      "agents": [
+        {
+          "name": "document-specialist:a13ab24",
+          "role": "document-specialist",
+          "ownership": "a13ab24d16eb9fea5",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-07-24T18:20:01.393Z"
+        },
+        {
+          "name": "document-specialist:afece23",
+          "role": "document-specialist",
+          "ownership": "afece23f4204aa4db",
+          "status": "running",
+          "currentStep": null,
+          "latestUpdate": null,
+          "completedSummary": null,
+          "updatedAt": "2026-07-24T19:09:29.976Z"
+        }
+      ],
+      "timeline": [
+        {
+          "id": "session-stop:a49e1286f10bc69ca:2026-07-24T17:57:03.592Z",
+          "at": "2026-07-24T17:57:03.592Z",
+          "kind": "completion",
+          "agent": "document-specialist:a13ab24",
+          "detail": "completed",
+          "sourceKey": "session-stop:a49e1286f10bc69ca"
+        },
+        {
+          "id": "session-stop:ad6233b379426f175:2026-07-24T18:20:01.393Z",
+          "at": "2026-07-24T18:20:01.393Z",
+          "kind": "completion",
+          "agent": "document-specialist:a13ab24",
+          "detail": "completed",
+          "sourceKey": "session-stop:ad6233b379426f175"
+        },
+        {
+          "id": "session-start:afece23f4204aa4db:2026-07-24T19:09:29.976Z",
+          "at": "2026-07-24T19:09:29.976Z",
+          "kind": "update",
+          "agent": "document-specialist:afece23",
+          "detail": "started document-specialist:afece23",
+          "sourceKey": "session-start:afece23f4204aa4db"
+        }
+      ]
+    }
+  ]
+}

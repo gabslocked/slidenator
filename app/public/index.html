@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slidenator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/public/styles.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="side-head">
+      <span class="wordmark">Slidenator</span>
+      <button id="collapseBtn" class="icon-btn" title="recolher menu">☰</button>
+    </div>
+    <button id="newChat" class="new-chat">＋&nbsp; Nova conversa</button>
+    <div class="side-section">
+      <p class="side-label">Conversas</p>
+      <div id="convList" class="conv-list"><p class="side-empty">nenhuma ainda</p></div>
+    </div>
+    <div class="side-foot">
+      <div id="userInfo" class="user-info">
+        <span id="userEmail" class="user-email"></span>
+        <button id="logoutBtn" class="user-logout" title="Sair">Sair</button>
+      </div>
+      <button id="openSettings" class="side-btn">⚙&nbsp; Configurações</button>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div id="deckPill" class="deck-pill" hidden>
+      <span id="deckPillSpinner" class="spinner" hidden></span>
+      <span id="deckPillText" class="deck-pill-text"></span>
+      <button id="deckPillOpen" class="deck-pill-open" type="button" title="Abrir deck">↗</button>
+    </div>
+    <button id="expandBtn" class="icon-btn floating" title="abrir menu" hidden>☰</button>
+    <div id="chatScroll">
+      <div id="chatCol"></div>
+    </div>
+    <div id="composerWrap">
+      <div id="fileChips"></div>
+      <form id="chatForm">
+        <button type="button" id="attachBtn" title="anexar logo ou documentos">＋</button>
+        <input id="chatInput" type="text" autocomplete="off" placeholder="Descreva a apresentação que você precisa…">
+        <button id="chatSend" type="submit" title="enviar">↑</button>
+      </form>
+      <p class="foot">Arraste o logo e documentos para o chat</p>
+    </div>
+    <div id="dropHint">Solte aqui — logo (imagem) ou documentos (.md .txt .csv)</div>
+    <input id="chatFiles" type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/svg+xml,.md,.txt,.markdown,.csv,.json">
+  </main>
+</div>
+
+<dialog id="settings">
+  <div class="dlg-head">
+    <h2>Configurações</h2>
+    <button id="closeSettings" class="icon-btn">✕</button>
+  </div>
+
+  <section>
+    <h3>Geração</h3>
+    <label>Qualidade
+      <select id="effort">
+        <option value="high">Alta</option>
+        <option value="xhigh">Máxima</option>
+        <option value="medium">Rápida</option>
+      </select>
+    </label>
+  </section>
+
+  <section>
+    <h3>Identidade visual <span class="muted small">(o assistente preenche pelo chat — aqui é o ajuste fino)</span></h3>
+    <div class="grid2">
+      <label>Marca<input id="brandName" type="text" placeholder="ACME"></label>
+      <label>Tom de voz<input id="brandTone" type="text" placeholder="direto, acolhedor"></label>
+    </div>
+    <div class="grid4">
+      <label>Destaque<input id="cAccent" type="color" value="#D8E022"></label>
+      <label>Fundo escuro<input id="cInk" type="color" value="#070808"></label>
+      <label>Fundo claro<input id="cPaper" type="color" value="#EBEBEB"></label>
+      <label>Bordas
+        <select id="brandRadius">
+          <option value="arredondado">arredondadas</option>
+          <option value="medio">médias</option>
+          <option value="reto">retas</option>
+        </select>
+      </label>
+    </div>
+    <label class="mt">Logo <input id="brandLogo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label>
+    <span id="logoPreview" hidden></span>
+  </section>
+
+  <button id="saveSettings" class="btn-dark">Salvar</button>
+</dialog>
+
+<script src="/public/app.js"></script>
+</body>
+</html>
