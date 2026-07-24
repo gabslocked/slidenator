@@ -3,52 +3,144 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Slidenator</title>
+<title>Entrar · Slidenator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/public/styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f7f7f8; --panel:#ffffff; --border:#e4e4e7; --text:#18181b;
+    --muted:#8f8f95; --dark:#171717; --err:#dc2626;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:var(--bg); color:var(--text);
+    font-family:'Inter',-apple-system,system-ui,sans-serif; font-size:15px;
+    padding:24px;
+  }
+  .wrap { width:100%; max-width:400px; }
+  .brand { text-align:center; margin-bottom:28px; }
+  .brand .mark {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:44px; height:44px; border-radius:12px; background:var(--dark); color:#fff;
+    font-weight:800; font-size:19px; margin-bottom:14px;
+  }
+  .brand h1 { font-size:22px; font-weight:700; letter-spacing:-.02em; }
+  .brand p { color:var(--muted); font-size:13.5px; margin-top:6px; }
+  .card {
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:24px; box-shadow:0 1px 2px rgba(0,0,0,.03), 0 8px 24px rgba(0,0,0,.04);
+  }
+  .tabs {
+    display:grid; grid-template-columns:1fr 1fr; gap:4px;
+    background:var(--bg); border-radius:10px; padding:4px; margin-bottom:20px;
+  }
+  .tab {
+    border:0; background:none; font:inherit; font-size:13.5px; font-weight:600;
+    color:var(--muted); padding:8px; border-radius:8px; cursor:pointer;
+  }
+  .tab.active { background:var(--panel); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  form { display:none; }
+  form.active { display:block; }
+  label { display:block; font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:6px; }
+  .field { margin-bottom:14px; }
+  input {
+    width:100%; font:inherit; font-size:14.5px; color:var(--text);
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:11px 13px; outline:none; transition:border-color .12s, box-shadow .12s;
+  }
+  input::placeholder { color:#b9b9bf; }
+  input:focus { border-color:#a1a1aa; box-shadow:0 0 0 3px rgba(24,24,27,.06); }
+  .error {
+    display:none; background:#fef2f2; border:1px solid #fecaca; color:var(--err);
+    font-size:13px; border-radius:10px; padding:10px 12px; margin-bottom:14px;
+  }
+  .error.show { display:block; }
+  button.submit {
+    width:100%; border:0; border-radius:10px; background:var(--dark); color:#fff;
+    font:inherit; font-size:14.5px; font-weight:600; padding:12px; cursor:pointer;
+    transition:opacity .12s; margin-top:4px;
+  }
+  button.submit:hover { opacity:.92; }
+  button.submit:disabled { opacity:.5; cursor:default; }
+  .swap { text-align:center; font-size:13px; color:var(--muted); margin-top:16px; }
+  .swap a { color:var(--text); font-weight:600; cursor:pointer; text-decoration:none; }
+  .swap a:hover { text-decoration:underline; }
+  .foot { text-align:center; color:var(--muted); font-size:12px; margin-top:22px; }
+</style>
 </head>
-<body class="auth-body">
-<div class="auth-wrap">
-  <p class="auth-logo">Slidenator</p>
-  <div class="auth-card">
-    <div class="auth-tabs">
-      <button type="button" id="tabLogin" class="auth-tab active">Entrar</button>
-      <button type="button" id="tabRegister" class="auth-tab">Criar conta</button>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <span class="mark">S</span>
+    <h1>Slidenator</h1>
+    <p>Apresentações interativas, geradas por conversa</p>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button type="button" class="tab active" id="tabLogin">Entrar</button>
+      <button type="button" class="tab" id="tabRegister">Criar conta</button>
     </div>
 
-    <form id="loginForm" class="auth-form">
-      <label>E-mail<input id="loginEmail" type="email" required autocomplete="email"></label>
-      <label>Senha<input id="loginPassword" type="password" required autocomplete="current-password"></label>
-      <p id="loginError" class="auth-error" hidden></p>
-      <button type="submit" class="btn-dark">Entrar</button>
+    <form id="loginForm" class="active" novalidate>
+      <div class="field">
+        <label for="loginEmail">E-mail</label>
+        <input id="loginEmail" type="email" placeholder="voce@empresa.com" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="loginPassword">Senha</label>
+        <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <p class="error" id="loginError"></p>
+      <button class="submit" type="submit">Entrar</button>
+      <p class="swap">Primeira vez aqui? <a data-go="register">Crie sua conta</a></p>
     </form>
 
-    <form id="registerForm" class="auth-form" hidden>
-      <label>Nome<input id="registerName" type="text" required autocomplete="name"></label>
-      <label>E-mail<input id="registerEmail" type="email" required autocomplete="email"></label>
-      <label>Senha (mín. 8 caracteres)<input id="registerPassword" type="password" required minlength="8" autocomplete="new-password"></label>
-      <p id="registerError" class="auth-error" hidden></p>
-      <button type="submit" class="btn-dark">Criar conta</button>
+    <form id="registerForm" novalidate>
+      <div class="field">
+        <label for="registerName">Nome</label>
+        <input id="registerName" type="text" placeholder="Seu nome" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="registerEmail">E-mail</label>
+        <input id="registerEmail" type="email" placeholder="voce@empresa.com" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="registerPassword">Senha</label>
+        <input id="registerPassword" type="password" placeholder="mínimo de 8 caracteres" minlength="8" autocomplete="new-password" required>
+      </div>
+      <p class="error" id="registerError"></p>
+      <button class="submit" type="submit">Criar conta</button>
+      <p class="swap">Já tem conta? <a data-go="login">Entre</a></p>
     </form>
   </div>
+
+  <p class="foot">© 2026 Slidenator</p>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 
-function showTab(which) {
+function show(which) {
   const isLogin = which === 'login';
   $('tabLogin').classList.toggle('active', isLogin);
   $('tabRegister').classList.toggle('active', !isLogin);
-  $('loginForm').hidden = !isLogin;
-  $('registerForm').hidden = isLogin;
+  $('loginForm').classList.toggle('active', isLogin);
+  $('registerForm').classList.toggle('active', !isLogin);
+  $('loginError').classList.remove('show');
+  $('registerError').classList.remove('show');
+  (isLogin ? $('loginEmail') : $('registerName')).focus();
 }
-$('tabLogin').onclick = () => showTab('login');
-$('tabRegister').onclick = () => showTab('register');
+$('tabLogin').onclick = () => show('login');
+$('tabRegister').onclick = () => show('register');
+document.querySelectorAll('[data-go]').forEach((a) => { a.onclick = () => show(a.dataset.go); });
 
-async function submitAuth(path, body, errEl) {
-  errEl.hidden = true;
+async function submitAuth(btn, path, body, errEl) {
+  errEl.classList.remove('show');
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Aguarde…';
   try {
     const res = await fetch(path, {
       method: 'POST',
@@ -56,34 +148,35 @@ async function submitAuth(path, body, errEl) {
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 200) {
-      location.href = '/';
-      return;
-    }
+    if (res.ok) { location.href = '/'; return; }
     errEl.textContent = data.error || 'Não foi possível concluir. Tente novamente.';
-    errEl.hidden = false;
-  } catch (e) {
+    errEl.classList.add('show');
+  } catch {
     errEl.textContent = 'Falha de conexão. Tente novamente.';
-    errEl.hidden = false;
+    errEl.classList.add('show');
   }
+  btn.disabled = false;
+  btn.textContent = original;
 }
 
 $('loginForm').onsubmit = (ev) => {
   ev.preventDefault();
-  submitAuth('/api/auth/login', {
+  submitAuth(ev.submitter || ev.target.querySelector('.submit'), '/api/auth/login', {
     email: $('loginEmail').value.trim(),
     password: $('loginPassword').value,
   }, $('loginError'));
 };
-
 $('registerForm').onsubmit = (ev) => {
   ev.preventDefault();
-  submitAuth('/api/auth/register', {
+  submitAuth(ev.submitter || ev.target.querySelector('.submit'), '/api/auth/register', {
     name: $('registerName').value.trim(),
     email: $('registerEmail').value.trim(),
     password: $('registerPassword').value,
   }, $('registerError'));
 };
+
+/* já logado? vai direto para o app */
+fetch('/api/me').then((r) => { if (r.ok) location.href = '/'; }).catch(() => {});
 </script>
 </body>
 </html>
