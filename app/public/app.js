@@ -24,15 +24,34 @@ let previewTimer = null;
 let previewVer = 0;
 let typingRow = null;
 
+/* estado da CENA ao vivo (trilha de agentes + filmstrip + cronômetro) */
+let sceneTotal = 0;              // nº de slides do roteiro
+let sceneTitles = [];            // título por slide
+let sceneStatus = [];            // '' | 'building' | 'fixing' | 'done' por slide
+let sceneStageIdx = -1;          // etapa ativa (0 roteiro · 1 direção · 2 construção · 3 montagem)
+let sceneDone = false;
+let sceneElapsed = 0;            // segundos totais congelados no fim
+let clockTimer = null;
+let clockFrozen = false;
+
 /* refs de layout resolvidas no boot (script no fim do body) */
 const main = $('main');
 const chatCol = $('chatCol');
 const chatScroll = $('chatScroll');
 const chatInput = $('chatInput');
 const chatSend = $('chatSend');
-const viewerFrame = $('viewerFrame');
+const viewerFrameA = $('viewerFrame');
+const viewerFrameB = $('viewerFrameB');
+let frontFrame = viewerFrameA;          // iframe atualmente visível (dois alternam p/ crossfade)
 const CURSOR = '<span class="stream-cursor" aria-hidden="true"></span>';
-const STAGE_ICON = { roteiro: '✍︎', design: '◫', construcao: '⚙', 'construção': '⚙', montagem: '▣' };
+/* trilha fixa de 4 etapas; eventos SSE (stage/outline/slide) dirigem o estágio ativo */
+const AGENT_STEPS = [
+  { label: 'Roteirista', icon: '✍︎' },
+  { label: 'Direção', icon: '◫' },
+  { label: 'Construção', icon: '⚙' },
+  { label: 'Montagem', icon: '▣' },
+];
+const STAGE_INDEX = { roteiro: 0, design: 1, construcao: 2, 'construção': 2, montagem: 3 };
 const PLACEHOLDERS = {
   briefing: 'Descreva a apresentação que você precisa…',
   generating: 'Pode continuar conversando enquanto eu gero…',
@@ -140,9 +159,11 @@ async function consumeChatStream(res) {
   const ensureBot = () => {
     if (!st.bodyEl) { clearTyping(); const r = row('bot', ''); const b = r.querySelector('.md'); b.classList.add('streaming'); st.bodyEl = b; }
   };
-  const paint = () => { st.scheduled = false; if (st.bodyEl) { st.bodyEl.innerHTML = renderMd(st.acc) + CURSOR; scrollChat(); } };
+  /* st.done precisa ser checado no paint: um rAF agendado antes do finalize
+     repintaria o cursor depois da mensagem pronta */
+  const paint = () => { st.scheduled = false; if (st.done || !st.bodyEl) return; st.bodyEl.innerHTML = renderMd(st.acc) + CURSOR; scrollChat(); };
   const schedule = () => { if (st.scheduled) return; st.scheduled = true; requestAnimationFrame(paint); };
-  const finalize = () => { if (st.bodyEl) { st.bodyEl.classList.remove('streaming'); st.bodyEl.innerHTML = renderMd(st.acc); scrollChat(); } };
+  const finalize = () => { st.done = true; if (st.bodyEl) { st.bodyEl.classList.remove('streaming'); st.bodyEl.innerHTML = renderMd(st.acc); scrollChat(); } };
 
   const handle = (ev) => {
     switch (ev.type) {
@@ -329,7 +350,13 @@ function cardError(msg) {
   return node;
 }
 
-/* ================= visualizador ao vivo (split view, contrato §5) ================= */
+/* ================= visualizador ao vivo (split view, contrato §5) =================
+   O painel direito é uma CENA dirigida pelos eventos SSE do job:
+     · palco — dois iframes alternando p/ entrada cinematográfica sem flash branco
+     · trilha de agentes — 4 etapas fixas (roteiro→direção→construção→montagem)
+     · filmstrip — um quadro 16:9 por slide do roteiro, preenchendo um a um
+     · cronômetro — mono no header, congela no deck_ready
+   A verdade continua sendo o iframe (/api/jobs/:id/preview?v=N e depois /deck/:id). */
 function showViewer() { hasViewer = true; main.classList.add('split'); viewerOpen = true; updateViewerTab(); }
 function openViewer() { showViewer(); }
 function closeViewer() { viewerOpen = false; main.classList.remove('split'); updateViewerTab(); }
@@ -341,6 +368,8 @@ function setViewerBadge() {
   const [txt, cls] = map[convState] || ['', ''];
   badge.textContent = txt;
   badge.className = 'viewer-badge' + (cls ? ' ' + cls : '');
+  const live = $('viewerLive');
+  if (live) live.className = 'viewer-live' + (convState === 'ready' ? ' is-ready' : (convState === 'briefing' ? ' is-idle' : ''));
 }
 
 function setConvState(s) {
@@ -349,44 +378,235 @@ function setConvState(s) {
   setViewerBadge();
 }
 
+/* ---- palco: crossfade entre dois iframes (o iframe em si não anima bem) ---- */
+function hideStagePlaceholder() { const p = $('stagePlaceholder'); if (p) p.classList.add('is-hidden'); }
+function showStagePlaceholder() { const p = $('stagePlaceholder'); if (p) p.classList.remove('is-hidden'); }
+
+function loadViewerUrl(url) {
+  if (!url) return;
+  const back = (frontFrame === viewerFrameA) ? viewerFrameB : viewerFrameA;
+  back.onload = () => {
+    back.onload = null;
+    hideStagePlaceholder();
+    back.classList.remove('is-back'); back.classList.add('is-front'); back.removeAttribute('aria-hidden');
+    frontFrame.classList.remove('is-front'); frontFrame.classList.add('is-back'); frontFrame.setAttribute('aria-hidden', 'true');
+    frontFrame = back;
+  };
+  back.classList.add('is-back');
+  back.src = url;
+}
+
+function blankFrames() {
+  [viewerFrameA, viewerFrameB].forEach((f) => { f.onload = null; f.removeAttribute('src'); });
+  viewerFrameA.classList.add('is-front'); viewerFrameA.classList.remove('is-back'); viewerFrameA.removeAttribute('aria-hidden');
+  viewerFrameB.classList.add('is-back'); viewerFrameB.classList.remove('is-front'); viewerFrameB.setAttribute('aria-hidden', 'true');
+  frontFrame = viewerFrameA;
+  showStagePlaceholder();
+}
+
+/* base de URL atual do palco: preview parcial durante a geração, deck final depois */
+function currentStageBase() {
+  if (currentJobId && !sceneDone) return '/api/jobs/' + currentJobId + '/preview?v=' + previewVer;
+  if (currentDeckId) return '/deck/' + currentDeckId;
+  return null;
+}
+
+/* ---- cronômetro (mono, discreto no header; congela no fim) ---- */
+function setClockVisible(v) { const c = $('viewerClock'); if (c) c.hidden = !v; }
+function fmtClock(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function tickClock() { if (clockFrozen) return; const c = $('viewerClock'); if (c) c.textContent = fmtClock(Date.now() - jobStartAt); }
+function startClock() { stopClock(); clockFrozen = false; setClockVisible(true); tickClock(); clockTimer = setInterval(tickClock, 250); }
+function stopClock() { if (clockTimer) { clearInterval(clockTimer); clockTimer = null; } }
+function freezeClock() { clockFrozen = true; stopClock(); const c = $('viewerClock'); if (c && jobStartAt) c.textContent = fmtClock(Date.now() - jobStartAt); }
+
+/* ---- trilha de agentes ---- */
+function doneCount() { let n = 0; for (const s of sceneStatus) if (s === 'done') n++; return n; }
+
+function renderRail() {
+  const rail = $('agentRail');
+  if (!rail) return;
+  rail.classList.remove('is-error');
+  if (sceneDone) {
+    rail.classList.add('is-summary');
+    const n = sceneTotal || doneCount();
+    const t = sceneElapsed ? ('pronto em ' + sceneElapsed + 's') : 'pronto';
+    rail.innerHTML = `<span class="rail-summary"><span class="rail-check">✓</span><span>${escHtml(t)}${n ? ' · ' + n + ' slide' + (n > 1 ? 's' : '') : ''}</span></span>`;
+    return;
+  }
+  rail.classList.remove('is-summary');
+  const cur = sceneStageIdx;
+  rail.innerHTML = AGENT_STEPS.map((step, i) => {
+    const done = i < cur, active = i === cur;
+    let label = step.label;
+    if (i === 2 && (active || done) && sceneTotal) label += ' ' + Math.min(doneCount(), sceneTotal) + '/' + sceneTotal;
+    const cls = done ? 'is-done' : active ? 'is-active' : 'is-pending';
+    const dot = done
+      ? '<span class="rail-check">✓</span>'
+      : `<span class="rail-ico">${escHtml(step.icon)}</span>${active ? '<span class="rail-halo"></span>' : ''}`;
+    const conn = i < AGENT_STEPS.length - 1 ? `<span class="rail-conn${i < cur ? ' is-full' : ''}"></span>` : '';
+    return `<span class="rail-step ${cls}"><span class="rail-dot">${dot}</span><span class="rail-label">${escHtml(label)}</span></span>${conn}`;
+  }).join('');
+}
+
+/* ---- linha única de status com crossfade (não acumula lista) ---- */
+function setStatusLine(text) {
+  const st = $('stageStatus');
+  if (!st) return;
+  const t = text || '';
+  if (st.dataset.t === t) return;
+  st.dataset.t = t;
+  st.classList.remove('show');
+  requestAnimationFrame(() => requestAnimationFrame(() => { st.textContent = t; if (t) st.classList.add('show'); }));
+}
+
+/* ---- filmstrip: um quadro 16:9 por slide do roteiro ---- */
+function heroFrameIdx() {
+  let building = -1, lastDone = -1;
+  sceneStatus.forEach((s, i) => { if (s === 'building' || s === 'fixing') building = i; if (s === 'done') lastDone = i; });
+  return building >= 0 ? building : lastDone;
+}
+
+function renderFilmstrip() {
+  const strip = $('filmstrip');
+  if (!strip) return;
+  if (!sceneTotal) { strip.innerHTML = ''; return; }
+  if (strip.childElementCount !== sceneTotal) {
+    strip.innerHTML = '';
+    for (let i = 0; i < sceneTotal; i++) {
+      const item = el('button', 'film-item');
+      item.type = 'button';
+      item.dataset.i = String(i);
+      item.innerHTML =
+        `<span class="film-thumb"><span class="film-num">${i + 1}</span>` +
+        `<span class="film-shimmer"></span><span class="film-check">✓</span></span>` +
+        `<span class="film-label"></span>`;
+      item.onclick = () => gotoSlide(Number(item.dataset.i));
+      strip.appendChild(item);
+    }
+  }
+  const hero = heroFrameIdx();
+  [...strip.children].forEach((item, i) => {
+    const status = sceneStatus[i] || '';
+    item.className = 'film-item ' + (status ? 'is-' + status : 'is-empty') + (i === hero ? ' is-current' : '');
+    const label = item.querySelector('.film-label');
+    const title = sceneTitles[i] || ('Slide ' + (i + 1));
+    label.textContent = title;
+    item.disabled = status !== 'done';
+    item.title = status === 'done' ? ('Ir para o slide ' + (i + 1) + ' · ' + title) : title;
+  });
+}
+
+/* clique num quadro pronto → navega o iframe até o slide (o deck lê #slide-N no load) */
+function gotoSlide(index) {
+  if (sceneStatus[index] !== 'done') return;
+  const base = currentStageBase();
+  if (!base) return;
+  loadViewerUrl(base.split('#')[0] + '#slide-' + (index + 1));
+}
+
+/* ---- transições de cena dirigidas pelos eventos ---- */
+function resetScene() {
+  sceneTotal = 0; sceneTitles = []; sceneStatus = []; sceneStageIdx = -1; sceneDone = false; sceneElapsed = 0;
+  renderRail(); renderFilmstrip();
+  const st = $('stageStatus'); if (st) { st.textContent = ''; st.dataset.t = ''; st.classList.remove('show'); }
+}
+
+function sceneStage(stageKey, msg) {
+  const idx = STAGE_INDEX[stageKey];
+  if (idx != null && idx > sceneStageIdx) sceneStageIdx = idx;
+  if (msg) setStatusLine(msg);
+  renderRail();
+}
+
+function sceneOutline(title, titles) {
+  titles = titles || [];
+  sceneTotal = titles.length;
+  sceneTitles = titles.slice();
+  sceneStatus = sceneStatus.slice(0, sceneTotal);
+  while (sceneStatus.length < sceneTotal) sceneStatus.push('');
+  if (sceneStageIdx < 0) sceneStageIdx = 0;
+  if (title) setViewerTitle(title);
+  setStatusLine('Roteiro pronto · ' + sceneTotal + ' slides');
+  renderFilmstrip();
+  renderRail();
+}
+
+function sceneSlide(index, total, title, status) {
+  if (typeof index !== 'number') return;
+  if (total && total > sceneTotal) sceneTotal = total;
+  while (sceneStatus.length <= index) sceneStatus.push('');
+  if (title) sceneTitles[index] = title;
+  sceneStatus[index] = status || 'building';
+  if (sceneStageIdx < 2) sceneStageIdx = 2;
+  const label = title || sceneTitles[index] || ('slide ' + (index + 1));
+  if (status === 'fixing') setStatusLine('Ajustando: ' + label);
+  else if (status === 'done') setStatusLine('Slide pronto: ' + label);
+  else setStatusLine('Construindo: ' + label);
+  renderFilmstrip();
+  renderRail();
+}
+
+/* deck_ready: filmstrip permanece, trilha colapsa num resumo */
+function finishScene() {
+  sceneDone = true;
+  freezeClock();
+  sceneElapsed = jobStartAt ? Math.max(0, Math.round((Date.now() - jobStartAt) / 1000)) : sceneElapsed;
+  if (!sceneTotal && sceneStatus.length) sceneTotal = sceneStatus.length;
+  sceneStatus = sceneStatus.map(() => 'done');
+  setStatusLine('');
+  renderFilmstrip();
+  renderRail();
+}
+
+/* resumo estático ao reabrir uma apresentação já pronta (sem info por slide) */
+function renderReadyStatic() {
+  sceneTotal = 0; sceneTitles = []; sceneStatus = []; sceneStageIdx = 3; sceneDone = true; sceneElapsed = 0;
+  const rail = $('agentRail');
+  if (rail) { rail.classList.add('is-summary'); rail.classList.remove('is-error'); rail.innerHTML = '<span class="rail-summary"><span class="rail-check">✓</span><span>Apresentação pronta</span></span>'; }
+  const st = $('stageStatus'); if (st) { st.textContent = ''; st.dataset.t = ''; st.classList.remove('show'); }
+  renderFilmstrip();
+}
+
+/* volta o painel ao estado inicial (trocar de conversa) */
+function resetViewer() {
+  stopClock(); clockFrozen = false;
+  const c = $('viewerClock'); if (c) c.textContent = '0:00';
+  setClockVisible(false);
+  resetScene();
+  blankFrames();
+  setViewerTitle('Prévia ao vivo');
+}
+
 function loadDeckIntoViewer(deck) {
   if (!deck) return;
   setViewerTitle(deck.title || 'Apresentação');
-  if (viewerFrame) viewerFrame.src = '/deck/' + deck.id;
-}
-
-function relTime() {
-  if (!jobStartAt) return '';
-  const s = Math.max(0, Math.floor((Date.now() - jobStartAt) / 1000));
-  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-}
-
-function addTimeline(stage, msg) {
-  const feed = $('viewerTimeline');
-  const item = el('div', 'tl-item');
-  const ico = STAGE_ICON[stage] || '•';
-  item.innerHTML = `<span class="tl-ico">${escHtml(ico)}</span><span class="tl-body"><span class="tl-msg"></span><span class="tl-time">${escHtml(relTime())}</span></span>`;
-  item.querySelector('.tl-msg').textContent = msg || stage || '';
-  feed.appendChild(item);
-  feed.scrollTop = feed.scrollHeight;
+  setClockVisible(false);
+  renderReadyStatic();
+  loadViewerUrl('/deck/' + deck.id);
 }
 
 function schedulePreview(v) {
   if (v) previewVer = v;
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
-    if (viewerFrame && currentJobId) viewerFrame.src = '/api/jobs/' + currentJobId + '/preview?v=' + previewVer;
+    if (currentJobId) loadViewerUrl('/api/jobs/' + currentJobId + '/preview?v=' + previewVer);
   }, 800);
 }
 
 function stopJobStream() {
   if (jobES) { jobES.close(); jobES = null; }
   clearTimeout(previewTimer);
+  stopClock();
 }
 
 function startJobStream(jobId) {
   stopJobStream();
   jobStartAt = Date.now();
+  /* o backend reemite todo o histórico de eventos ao conectar (server.js),
+     então resetamos a cena e ela se reconstrói sozinha a partir do replay */
+  resetScene();
+  blankFrames();
+  startClock();
   jobES = new EventSource('/api/jobs/' + jobId + '/stream');
   jobES.onmessage = (m) => {
     let ev; try { ev = JSON.parse(m.data); } catch { return; }
@@ -399,15 +619,15 @@ function handleJobEvent(ev) {
   if (ev && ev.type) {
     switch (ev.type) {
       case 'stage':
-        addTimeline(ev.stage, ev.msg);
+        sceneStage(ev.stage, ev.msg);
         if (activeGen) activeGen.setStage(ev.stage, ev.msg);
         break;
       case 'outline':
+        sceneOutline(ev.title, ev.slides || []);
         if (activeGen) activeGen.setOutline(ev.title, ev.slides || []);
-        if (ev.title) setViewerTitle(ev.title);
-        addTimeline('roteiro', 'Roteiro pronto · ' + ((ev.slides && ev.slides.length) || 0) + ' slides');
         break;
       case 'slide':
+        sceneSlide(ev.index, ev.total, ev.title, ev.status);
         if (activeGen) activeGen.setSlide(ev.index, ev.total, ev.title, ev.status);
         break;
       case 'preview':
@@ -428,7 +648,7 @@ function handleJobEvent(ev) {
   const msg = ev.message || ev.msg || '';
   if (stage === 'done') { onDeckReady(currentDeckId, currentDeckId ? ('/deck/' + currentDeckId) : null); return; }
   if (stage === 'error') { onJobError(msg); return; }
-  addTimeline(stage, msg);
+  sceneStage(stage, msg);
   if (activeGen) activeGen.setStage(stage, msg);
 }
 
@@ -436,9 +656,10 @@ async function onDeckReady(deckId, url) {
   stopJobStream();
   if (deckId) currentDeckId = deckId;
   if (activeGen) activeGen.setDone();
+  finishScene();
   setConvState('ready');
   const target = url || (currentDeckId ? ('/deck/' + currentDeckId) : null);
-  if (target && viewerFrame) viewerFrame.src = target;
+  if (target) loadViewerUrl(target);
   await reloadConversationMeta();
   const deck = latestDeck();
   if (deck && deck.title) setViewerTitle(deck.title);
@@ -447,7 +668,10 @@ async function onDeckReady(deckId, url) {
 
 function onJobError(msg) {
   stopJobStream();
+  freezeClock();
   if (activeGen) activeGen.setError(msg);
+  setStatusLine(msg ? ('Falhou: ' + msg) : 'Falhou');
+  const rail = $('agentRail'); if (rail) rail.classList.add('is-error');
   spawnCard(cardError(msg));
   setConvState(currentDeckId ? 'ready' : 'briefing');
   reloadConversationMeta();
@@ -460,7 +684,6 @@ function handleDeckJob(jobId, deckId, mode) {
   if (deckId) currentDeckId = deckId;
   setConvState(mode === 'edit' ? 'editing' : 'generating');
   activeGen = spawnGenerationCard(jobId, mode);
-  $('viewerTimeline').innerHTML = '';
   startJobStream(jobId);
   showViewer();
 }
@@ -583,7 +806,7 @@ function renderConvList() {
   $('convList').innerHTML = conversations.map((c) => `
     <button class="conv-item ${c.id === currentConversationId ? 'active' : ''}" data-id="${escAttr(c.id)}">
       <span class="t">${escHtml((c.title || '(sem título)').slice(0, 70))}
-        <small>${new Date(c.updatedAt).toLocaleString('pt-BR')}${c.deckCount ? ' · ' + c.deckCount + ' deck' + (c.deckCount > 1 ? 's' : '') : ''}</small></span>
+        <small>${new Date(c.updatedAt).toLocaleString('pt-BR')}${c.deckCount ? ' · ' + c.deckCount + ' apresentaç' + (c.deckCount > 1 ? 'ões' : 'ão') : ''}</small></span>
     </button>`).join('');
   $('convList').querySelectorAll('.conv-item').forEach((b) => {
     b.onclick = () => selectConversation(b.dataset.id);
@@ -595,8 +818,7 @@ async function selectConversation(id) {
   stopJobStream();
   closeViewer();
   hasViewer = false; viewerOpen = false; currentJobId = null; activeGen = null;
-  $('viewerTimeline').innerHTML = '';
-  if (viewerFrame) viewerFrame.removeAttribute('src');
+  resetViewer();
   currentConversationId = id;
   attachedDocNames = [];
   $('fileChips').innerHTML = '';

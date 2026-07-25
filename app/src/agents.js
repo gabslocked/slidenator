@@ -5,9 +5,11 @@ import Anthropic from '@anthropic-ai/sdk';
  *
  *   AI_PROVIDER          provider padrão: kimi | cerebras | anthropic   (padrão: kimi)
  *   CHAT_PROVIDER        override do provider do conversacional
- *   PIPELINE_PROVIDER    override do provider dos agents de design/construção
+ *   PIPELINE_PROVIDER    override do provider do spec-fill (1 chamada por slide)
+ *   OUTLINE_PROVIDER     override do provider do roteirista (fallback: o do pipeline)
  *   MODEL_CHAT           override do modelo do conversacional
- *   MODEL_PIPELINE       override do modelo da pipeline
+ *   MODEL_PIPELINE       override do modelo do spec-fill
+ *   MODEL_OUTLINE        override do modelo do roteiro (fallback: o do pipeline)
  *
  *   KIMI_API_KEY (ou AI_API_KEY)   chave do Kimi for Coding (sk-kimi-…)
  *   CEREBRAS_API_KEY               chave da Cerebras (csk-…)
@@ -36,20 +38,34 @@ const PROVIDERS = {
     style: 'openai',
     baseURL: 'https://api.cerebras.ai/v1',
     keys: ['CEREBRAS_API_KEY'],
-    // gpt-oss-120b em tudo: ~4× mais rápido e ~20× mais barato que o zai-glm-4.7
-    // (que gasta o dobro de tokens em raciocínio e sai do ar na Cerebras em 17/08/2026)
-    defaults: { chat: 'gpt-oss-120b', pipeline: 'gpt-oss-120b' },
+    // Modelo spec-fill (pipeline) volta ao zai-glm-4.7: agora a IA só preenche o
+    // spec JSON de UM slide (saída ~1KB), então o custo por chamada despenca mesmo
+    // com o GLM gastando tokens em raciocínio — e ele entrega o melhor design.
+    // O roteiro (outline), texto mais longo e menos sensível a estética, roda no
+    // gpt-oss-120b (~4× mais rápido / ~20× mais barato). Chat também no gpt-oss.
+    defaults: { chat: 'gpt-oss-120b', pipeline: 'zai-glm-4.7', outline: 'gpt-oss-120b' },
   },
 };
 
-export function resolveRole(role /* 'chat' | 'pipeline' */) {
+// Papéis que, sem provider/modelo próprios configurados, herdam os de outro papel.
+const ROLE_FALLBACK = { outline: 'pipeline' };
+
+export function resolveRole(role /* 'chat' | 'pipeline' | 'outline' */) {
   const upper = role.toUpperCase();
-  const name = process.env[`${upper}_PROVIDER`] || process.env.AI_PROVIDER || 'kimi';
+  const fb = ROLE_FALLBACK[role];
+  const fbUpper = fb ? fb.toUpperCase() : null;
+  // provider: override do papel → override do papel-fallback → padrão global → kimi
+  const name = process.env[`${upper}_PROVIDER`]
+    || (fbUpper && process.env[`${fbUpper}_PROVIDER`])
+    || process.env.AI_PROVIDER || 'kimi';
   const p = PROVIDERS[name];
   if (!p) throw new Error(`Provider desconhecido: ${name}`);
   const key = p.keys.map((k) => process.env[k]).find(Boolean) || '';
   if (!key) throw new Error(`Nenhuma chave configurada para o provider "${name}" (${p.keys.join(' ou ')})`);
-  const model = process.env[`MODEL_${upper}`] || p.defaults[role];
+  // modelo: override do papel → default do papel → (fallback) override/default do papel-fallback
+  const model = process.env[`MODEL_${upper}`]
+    || p.defaults[role]
+    || (fb && (process.env[`MODEL_${fbUpper}`] || p.defaults[fb]));
   return { name, model, key, ...p };
 }
 

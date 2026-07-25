@@ -13,6 +13,7 @@ import { interviewTurn } from './src/interview.js';
 import { runPipeline } from './src/pipeline.js';
 import { runEditPipeline } from './src/editdeck.js';
 import { assemble } from './src/assemble.js';
+import { renderSlide } from './src/slidekit/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -146,11 +147,14 @@ function launchGenerate(input, ctx) {
         (s, m, e) => emitJob(job, s, m, e),
       );
       const deckId = crypto.randomUUID();
+      // decks.slides guarda os SPECS (contrato §2), não o HTML: [{spec}] por slide.
+      // O HTML final vai em decks.html (rota /deck/:id inalterada). O edit lê os specs.
+      const specRows = result.slides.map((s) => ({ spec: s.spec }));
       await q(
         `INSERT INTO decks (id, org_id, conversation_id, title, outline, slides, html, version)
          VALUES ($1,$2,$3,$4,$5,$6,$7,1)`,
         [deckId, ctx.orgId, ctx.conversationId, result.title,
-          JSON.stringify(result.outline), JSON.stringify(result.slides), result.html],
+          JSON.stringify(result.outline), JSON.stringify(specRows), result.html],
       );
       job.deckId = deckId;
       job.status = 'done';
@@ -174,16 +178,25 @@ function launchEdit(input, ctx) {
       const r = await q('SELECT * FROM decks WHERE conversation_id = $1 ORDER BY updated_at DESC LIMIT 1', [ctx.conversationId]);
       const row = r.rows[0];
       if (!row) throw new Error('esta conversa ainda não tem apresentação para editar');
-      const deck = { title: row.title, outline: row.outline, slides: row.slides, brand: (ctx.org.brand || {}).name || '' };
-      // preview parte do deck atual e vai atualizando os slides tocados
-      job.slides = (row.slides || []).map((s) => ({ ...s }));
+      const brandKit = ctx.org.brand || {};
+      // decks.slides guarda [{spec}] (specs do contrato §2); o editor trabalha spec-a-spec.
+      const specs = (row.slides || []).map((s) => s && s.spec).filter(Boolean);
+      const deck = { title: row.title, outline: row.outline, slides: specs.map((spec) => ({ spec })), brand: brandKit.name || '' };
+      // preview parte do deck atual: re-renderiza os specs (determinístico) e atualiza os tocados
+      const rctx = { brand: { name: brandKit.name, logoDataUri: brandKit.logo }, theme: brandKit };
+      job.slides = specs.map((spec, i) => {
+        try { const { html, js } = renderSlide(spec, { ...rctx, index: i }); return { spec, html, js }; }
+        catch { return placeholderSlide((row.outline && row.outline.slides && row.outline.slides[i] || {}).title || ''); }
+      });
       const result = await runEditPipeline(
-        { deck, instructions: input.instructions, brandKit: ctx.org.brand || {}, ...previewHooks(job) },
+        { deck, instructions: input.instructions, brandKit, ...previewHooks(job) },
         (s, m, e) => emitJob(job, s, m, e),
       );
+      // persiste os specs atualizados ([{spec}]) + o HTML remontado
+      const specRows = result.slides.map((s) => ({ spec: s.spec }));
       await q(
         'UPDATE decks SET slides = $1, html = $2, version = version + 1, updated_at = now() WHERE id = $3',
-        [JSON.stringify(result.slides), result.html, row.id],
+        [JSON.stringify(specRows), result.html, row.id],
       );
       job.deckId = row.id;
       job.status = 'done';

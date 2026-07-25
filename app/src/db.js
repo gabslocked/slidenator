@@ -73,6 +73,11 @@ export async function migrate() {
     )
   `);
 
+  // slides (jsonb): no pipeline spec-fill guarda os SPECS do contrato §2, um por
+  // slide, no formato [{ spec }] — NÃO o HTML. O HTML final renderizado fica em
+  // decks.html (rota /deck/:id inalterada); o edit_deck lê os specs e re-renderiza.
+  // Decks antigos (pré-reforma) podem ter [{ html, js }] aqui — continuam servindo
+  // pelo decks.html; só não são editáveis pelo novo editor spec-a-spec.
   await q(`
     CREATE TABLE IF NOT EXISTS decks (
       id text PRIMARY KEY,
