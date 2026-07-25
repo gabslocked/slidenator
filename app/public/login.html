@@ -8,8 +8,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:#111214; --panel:#212227; --border:rgba(255,255,255,.09); --text:#f4f4f5;
-    --muted:#9a9aa2; --dark:#171717; --err:#f87171;
+    --bg:#f7f7f8; --panel:#ffffff; --border:#e4e4e7; --text:#18181b;
+    --muted:#8f8f95; --dark:#171717; --err:#dc2626;
   }
   * { box-sizing:border-box; margin:0; }
   body {
@@ -22,51 +22,51 @@
   .brand { text-align:center; margin-bottom:28px; }
   .brand .mark {
     display:inline-flex; align-items:center; justify-content:center;
-    width:44px; height:44px; border-radius:12px; background:#f4f4f5; color:#111214;
+    width:44px; height:44px; border-radius:12px; background:var(--dark); color:#fff;
     font-weight:800; font-size:19px; margin-bottom:14px;
   }
-  .brand h1 { font-size:22px; font-weight:700; letter-spacing:-.02em; color:#f4f4f5; }
+  .brand h1 { font-size:22px; font-weight:700; letter-spacing:-.02em; }
   .brand p { color:var(--muted); font-size:13.5px; margin-top:6px; }
   .card {
-    background:var(--panel); border:1px solid var(--border); border-radius:4px;
-    padding:24px; box-shadow:0 12px 40px rgba(0,0,0,.5);
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:24px; box-shadow:0 1px 2px rgba(0,0,0,.03), 0 8px 24px rgba(0,0,0,.04);
   }
   .tabs {
     display:grid; grid-template-columns:1fr 1fr; gap:4px;
-    background:rgba(255,255,255,.05); border-radius:4px; padding:4px; margin-bottom:20px;
+    background:var(--bg); border-radius:10px; padding:4px; margin-bottom:20px;
   }
   .tab {
     border:0; background:none; font:inherit; font-size:13.5px; font-weight:600;
-    color:var(--muted); padding:8px; border-radius:4px; cursor:pointer;
+    color:var(--muted); padding:8px; border-radius:8px; cursor:pointer;
   }
-  .tab.active { background:rgba(255,255,255,.1); color:#f4f4f5; }
+  .tab.active { background:var(--panel); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.08); }
   form { display:none; }
   form.active { display:block; }
-  label { display:block; font-size:12.5px; font-weight:600; color:#d6d6da; margin-bottom:6px; }
+  label { display:block; font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:6px; }
   .field { margin-bottom:14px; }
   input {
-    width:100%; font:inherit; font-size:14.5px; color:#f4f4f5;
-    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.12); border-radius:4px;
+    width:100%; font:inherit; font-size:14.5px; color:var(--text);
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
     padding:11px 13px; outline:none; transition:border-color .12s, box-shadow .12s;
   }
-  input::placeholder { color:#6c6c74; }
-  input:focus { border-color:rgba(255,255,255,.35); box-shadow:0 0 0 3px rgba(255,255,255,.07); }
+  input::placeholder { color:#b9b9bf; }
+  input:focus { border-color:#a1a1aa; box-shadow:0 0 0 3px rgba(24,24,27,.06); }
   .error {
-    display:none; background:rgba(220,38,38,.12); border:1px solid rgba(220,38,38,.4); color:var(--err);
-    font-size:13px; border-radius:4px; padding:10px 12px; margin-bottom:14px;
+    display:none; background:#fef2f2; border:1px solid #fecaca; color:var(--err);
+    font-size:13px; border-radius:10px; padding:10px 12px; margin-bottom:14px;
   }
   .error.show { display:block; }
   button.submit {
-    width:100%; border:0; border-radius:4px; background:#f4f4f5; color:#111214;
+    width:100%; border:0; border-radius:10px; background:var(--dark); color:#fff;
     font:inherit; font-size:14.5px; font-weight:600; padding:12px; cursor:pointer;
     transition:opacity .12s; margin-top:4px;
   }
   button.submit:hover { opacity:.92; }
   button.submit:disabled { opacity:.5; cursor:default; }
   .swap { text-align:center; font-size:13px; color:var(--muted); margin-top:16px; }
-  .swap a { color:#f4f4f5; font-weight:600; cursor:pointer; text-decoration:none; }
+  .swap a { color:var(--text); font-weight:600; cursor:pointer; text-decoration:none; }
   .swap a:hover { text-decoration:underline; }
-  .foot { text-align:center; color:#6c6c74; font-size:12px; margin-top:22px; }
+  .foot { text-align:center; color:var(--muted); font-size:12px; margin-top:22px; }
 </style>
 </head>
 <body>
