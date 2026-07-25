@@ -60,6 +60,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-s
 /* aba de reabrir o visualizador — encostada na borda direita, só aparece com ele fechado */
 .viewer-tab { position: absolute; top: 16px; right: 0; z-index: 15; display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-right: 0; border-radius: 999px 0 0 999px; padding: 8px 16px 8px 14px; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--text); cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.06); max-width: 280px; transition: transform .15s ease, border-color .15s ease; }
 .viewer-tab:hover { transform: translateX(-3px); border-color: #cfcfd4; }
+.viewer-tab[hidden] { display: none; }   /* display:flex acima venceria o atributo hidden */
 .viewer-tab span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .spinner { flex: none; width: 11px; height: 11px; border-radius: 99px; border: 2px solid var(--border); border-top-color: var(--text); animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -268,8 +269,9 @@ dialog input[type=file] { margin-top: 4px; font-size: 12.5px; }
 .agent-rail.is-error .rail-step.is-active .rail-dot { background: var(--err); }
 
 /* — palco: crossfade entre dois iframes — */
-.viewer-stage { flex: 1; min-height: 0; overflow: hidden; padding: 16px; display: flex; align-items: center; justify-content: center; background: var(--side); }
-.stage-wrap { width: 100%; max-width: 560px; }
+.viewer-stage { flex: 1; min-height: 0; overflow: hidden; padding: 16px; display: flex; align-items: center; justify-content: center; background: var(--side); container-type: size; }
+/* ocupa todo o espaço disponível mantendo 16:9 (100cqh = altura útil do palco) */
+.stage-wrap { width: min(100%, calc(100cqh * 16 / 9)); }
 .stage-inner { position: relative; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 14px 40px -14px rgba(23,23,22,.28); }
 .viewer-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; opacity: 0; transform: scale(1.015); transition: opacity .5s ease, transform .5s ease; will-change: opacity, transform; }
 .viewer-frame.is-front { opacity: 1; transform: scale(1); z-index: 2; }

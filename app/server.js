@@ -277,6 +277,11 @@ async function handleGetConversation(res, sess, id) {
     derived.deckId = latest.id;
     derived.deckUrl = '/deck/' + latest.id;
     derived.version = latest.version;
+    // títulos por slide (specs do SlideKit) — alimentam o filmstrip ao reabrir a conversa
+    const sl = await q('SELECT slides FROM decks WHERE id = $1', [latest.id]);
+    const specs = sl.rows[0] && Array.isArray(sl.rows[0].slides) ? sl.rows[0].slides : [];
+    const titles = specs.map((s) => (s && s.spec && s.spec.title) || null);
+    if (titles.length && titles.some(Boolean)) derived.slideTitles = titles;
   }
   sendJson(res, 200, {
     id, title: c.rows[0].title,

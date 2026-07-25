@@ -504,6 +504,21 @@ function gotoSlide(index) {
   loadViewerUrl(base.split('#')[0] + '#slide-' + (index + 1));
 }
 
+/* cena estática ao reabrir uma conversa já pronta: filmstrip completo + resumo,
+   usando os títulos dos specs persistidos (conv.slideTitles) */
+function sceneReady(titles, deck) {
+  sceneDone = true;
+  sceneStageIdx = AGENT_STEPS.length - 1;
+  sceneElapsed = 0;
+  sceneTitles = (titles || []).map((t, i) => t || ('Slide ' + (i + 1)));
+  sceneTotal = sceneTitles.length;
+  sceneStatus = sceneTitles.map(() => 'done');
+  renderRail();
+  renderFilmstrip();
+  setStatusLine('Apresentação pronta');
+  if (deck) { setViewerTitle(deck.title); loadViewerUrl('/deck/' + deck.id); }
+}
+
 /* ---- transições de cena dirigidas pelos eventos ---- */
 function resetScene() {
   sceneTotal = 0; sceneTitles = []; sceneStatus = []; sceneStageIdx = -1; sceneDone = false; sceneElapsed = 0;
@@ -841,6 +856,7 @@ async function selectConversation(id) {
       showViewer();
     } else if (state === 'ready') {
       hasViewer = true;   // a aba lateral pode reabrir o visualizador com a versão final
+      sceneReady(conv.slideTitles, latestDeck());
     }
   } catch (e) {
     currentDecks = [];
