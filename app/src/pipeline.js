@@ -5,7 +5,10 @@ import { CATALOG_PROMPT, validateSpec, renderSlide } from './slidekit/index.js';
 import { ROTEIRISTA_SYSTEM, specFillSystem, OUTLINE_SCHEMA, SPEC_FILL_SCHEMA } from './prompts.js';
 
 const MAX_DOC_CHARS = 150_000;
-const BUILD_CONCURRENCY = 4;
+// sequencial (1): cada slide é construído por vez e aparece no visualizador
+// antes do próximo — geração "ao vivo, slide a slide". Roteável por env se um
+// dia quisermos velocidade em vez do espetáculo.
+const BUILD_CONCURRENCY = Number(process.env.BUILD_CONCURRENCY) || 1;
 const FIX_ATTEMPTS = 2;
 
 function docsBlock(docs) {
@@ -147,7 +150,7 @@ export async function runPipeline(input, brandKit, emit) {
       system: catalogSystem,
       user: baseUser,
       schema: SPEC_FILL_SCHEMA,
-      maxTokens: 8000,
+      maxTokens: 12000,
     }, `Slide ${i + 1} ("${slide.title}")`);
 
     /* validação determinística + re-chamada com as issues (máx 2) */
@@ -164,7 +167,7 @@ export async function runPipeline(input, brandKit, emit) {
           `## Problemas detectados pela validação — corrija TODOS mantendo o conteúdo\n- ${issues.join('\n- ')}`,
         ].join('\n\n'),
         schema: SPEC_FILL_SCHEMA,
-        maxTokens: 8000,
+        maxTokens: 12000,
       }, `Slide ${i + 1} (correção)`);
       if (fixed) spec = fixed; else break;   // correção falhou: segue com o spec atual p/ deterministicFix
     }

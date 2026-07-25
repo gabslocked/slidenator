@@ -105,6 +105,7 @@ export async function interviewTurn(messages, ctx, hooks, stream = {}) {
     maxTokens: 4000,
     maxIters: 5,
     onToken,
+    onReset: () => onEvent({ type: 'reset' }),
     onTool: (name, input) => {
       if (name === 'update_brand') {
         const next = hooks.updateBrand(input);

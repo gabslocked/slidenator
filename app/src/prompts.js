@@ -139,5 +139,12 @@ export function specFillSystem(catalogPrompt) {
 - Escolha o \`theme\` (light/dark) coerente com o ritmo: capa dark → miolo claro → ganhos/fechamento dark.
 - Respeite os props obrigatórios de cada componente e use apenas ícones da lista. Números concretos vindos do roteiro (dados_sugeridos) entram nos componentes certos.
 
+## Riqueza e movimento (prioridade alta)
+- Pense passo a passo antes de responder: qual é a UMA ideia deste slide, qual componente-herói a comunica melhor, e quais 3–5 apoios a sustentam. Slide cru e vazio é falha.
+- PREFIRA componentes com animação embutida (bar-chart, line-chart, donut, progress, big-number com countup, timeline, flow) a texto estático — eles dão vida ao slide.
+- Um slide bom tem 4 a 7 componentes bem distribuídos preenchendo o palco com equilíbrio (sem estourar, sem deixar metade vazia).
+- Use \`demo\` (componente interativo) sempre que o assunto permitir demonstrar um fluxo/mecanismo, não só quando o roteiro pedir explicitamente — a interatividade é o diferencial do produto.
+- Dados concretos e específicos sempre que possível; se o roteiro deu números, use-os; se pediu um mecanismo, monte-o com flow/timeline/comparison passo a passo.
+
 ${catalogPrompt}`;
 }

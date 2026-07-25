@@ -104,7 +104,9 @@ function anthropicClient(p) {
 
 function anthropicThinking(p, maxTokens) {
   if (p.thinking === 'adaptive') return { type: 'adaptive' };
-  return { type: 'enabled', budget_tokens: Math.max(1024, Math.min(8192, Math.floor(maxTokens / 2))) };
+  // mais orçamento de raciocínio = slides mais ricos e detalhados (o gargalo
+  // não era o modelo, era o pouco pensamento sequencial que ele podia gastar)
+  return { type: 'enabled', budget_tokens: Math.max(2048, Math.min(24000, Math.floor(maxTokens * 0.8))) };
 }
 
 async function anthropicMessage(p, { model, system, messages, tools, maxTokens, onToken }) {
@@ -243,7 +245,7 @@ async function parseOpenAIStream(res, onToken) {
   return { message, finishReason, usage };
 }
 
-async function openaiComplete(p, { model, messages, tools, maxTokens, schema, onToken }) {
+async function openaiComplete(p, { model, messages, tools, maxTokens, schema, onToken, onReset }) {
   const body = { model, messages };
   if (schema) {
     body.response_format = { type: 'json_schema', json_schema: { name: 'saida', strict: true, schema } };
@@ -287,6 +289,7 @@ async function openaiComplete(p, { model, messages, tools, maxTokens, schema, on
       // done.message final como fonte de verdade, então a duplicação é transitória.
       if (finishReason === 'length' && budget < maxTokens * 4) {
         budget *= 2;
+        if (onReset) onReset();   // vai reemitir do zero: limpa o que já foi transmitido
         continue;
       }
       if (finishReason === 'length') {
@@ -302,12 +305,15 @@ async function openaiComplete(p, { model, messages, tools, maxTokens, schema, on
   throw lastErr;
 }
 
-async function openaiRunTools(p, { model, system, messages, tools, onTool, onToken, maxTokens, maxIters }) {
+async function openaiRunTools(p, { model, system, messages, tools, onTool, onToken, onReset, maxTokens, maxIters }) {
   const msgs = toOpenAIHistory(system, messages);
   for (let i = 0; i < maxIters; i++) {
-    const msg = await openaiComplete(p, { model, messages: msgs, tools, maxTokens, onToken });
+    const msg = await openaiComplete(p, { model, messages: msgs, tools, maxTokens, onToken, onReset });
     const calls = msg.tool_calls || [];
     if (calls.length) {
+      // modelos como o gpt-oss ecoam o JSON da ferramenta no canal de texto —
+      // isso já foi transmitido via onToken; limpa antes de rodar a ferramenta.
+      if (onReset) onReset();
       msgs.push({ role: 'assistant', content: msg.content || '', tool_calls: calls });
       for (const call of calls) {
         let result;
@@ -401,9 +407,9 @@ export async function aiJSON({ role, system, user, schema, maxTokens = 32000 }) 
  * messages: [{role:'user'|'assistant', content: string | blocos}] (histórico da conversa).
  * onTool(name, input) → string com o resultado.
  */
-export async function runTools({ role, system, messages, tools, onTool, onToken, maxTokens = 4000, maxIters = 5 }) {
+export async function runTools({ role, system, messages, tools, onTool, onToken, onReset, maxTokens = 4000, maxIters = 5 }) {
   const p = resolveRole(role);
-  const args = { model: p.model, system, messages, tools, onTool, onToken, maxTokens, maxIters };
+  const args = { model: p.model, system, messages, tools, onTool, onToken, onReset, maxTokens, maxIters };
   return p.style === 'openai' ? openaiRunTools(p, args) : anthropicRunTools(p, args);
 }
 

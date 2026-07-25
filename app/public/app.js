@@ -34,8 +34,14 @@ let sceneElapsed = 0;            // segundos totais congelados no fim
 let clockTimer = null;
 let clockFrozen = false;
 let currentSlideIdx = -1;        // slide exibido no palco → destaque .is-current no filmstrip
+let stagePinned = false;         // usuário navegou manualmente na tira durante a geração → pausa o auto-follow
+let stageUrl = '';               // última URL carregada no palco (dedupe → evita reload/piscada redundante)
 let filmThumbTimer = null;       // debounce generoso p/ recarregar as miniaturas ao trocar de versão
 let readyTitles = [];            // títulos persistidos p/ remontar a cena pronta ao reabrir o viewer
+
+/* tempo p/ o palco assentar num novo slide pronto (coalesce de previews em sequência) */
+const STAGE_SETTLE = 700;
+const prefersReducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 /* refs de layout resolvidas no boot (script no fim do body) */
 const main = $('main');
@@ -171,6 +177,12 @@ async function consumeChatStream(res) {
   const handle = (ev) => {
     switch (ev.type) {
       case 'start': break;
+      case 'reset':
+        // o turno virou chamada de ferramenta (ou vai reemitir): descarta o
+        // texto transmitido até aqui para não deixar JSON/eco vazado na bolha
+        st.acc = '';
+        if (st.bodyEl) st.bodyEl.innerHTML = CURSOR;
+        break;
       case 'token': ensureBot(); st.acc += (ev.text || ''); schedule(); break;
       case 'tool': handleToolEvent(ev); break;
       case 'deck_job': handleDeckJob(ev.jobId, ev.deckId, ev.mode || 'generate'); break;
@@ -387,6 +399,8 @@ function showStagePlaceholder() { const p = $('stagePlaceholder'); if (p) p.clas
 
 function loadViewerUrl(url) {
   if (!url) return;
+  if (url === stageUrl) return;            // já é o que está no palco → sem reload nem piscada
+  stageUrl = url;
   const back = (frontFrame === viewerFrameA) ? viewerFrameB : viewerFrameA;
   back.onload = () => {
     back.onload = null;
@@ -404,8 +418,13 @@ function blankFrames() {
   viewerFrameA.classList.add('is-front'); viewerFrameA.classList.remove('is-back'); viewerFrameA.removeAttribute('aria-hidden');
   viewerFrameB.classList.add('is-back'); viewerFrameB.classList.remove('is-front'); viewerFrameB.setAttribute('aria-hidden', 'true');
   frontFrame = viewerFrameA;
+  stageUrl = '';
+  setStageBuildLabel('');
   showStagePlaceholder();
 }
+
+/* legenda elegante sobre o placeholder do palco enquanto o 1º slide ainda não tem preview */
+function setStageBuildLabel(text) { const l = $('stageBuildLabel'); if (l) l.textContent = text || ''; }
 
 /* base de URL atual do palco: preview parcial durante a geração, deck final depois */
 function currentStageBase() {
@@ -471,6 +490,20 @@ function heroFrameIdx() {
   let building = -1, lastDone = -1;
   sceneStatus.forEach((s, i) => { if (s === 'building' || s === 'fixing') building = i; if (s === 'done') lastDone = i; });
   return building >= 0 ? building : lastDone;
+}
+
+/* índice do último slide já concluído — o palco fica nele enquanto o próximo é montado */
+function latestDoneIdx() { let idx = -1; sceneStatus.forEach((s, i) => { if (s === 'done') idx = i; }); return idx; }
+
+/* mantém o quadro em foco visível na tira, sem mexer na rolagem vertical da página */
+function scrollFilmTo(index) {
+  if (index < 0) return;
+  const strip = $('filmstrip');
+  if (!strip) return;
+  const item = strip.children[index];
+  if (!item) return;
+  const target = item.offsetLeft - (strip.clientWidth - item.clientWidth) / 2;
+  strip.scrollTo({ left: Math.max(0, target), behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
 }
 
 function filmstripVisible(v) {
@@ -601,7 +634,9 @@ function gotoSlide(index) {
   const base = currentStageBase();
   if (!base) return;
   currentSlideIdx = index;
+  if (!sceneDone) stagePinned = true;   // navegação manual durante a geração pausa o auto-follow
   loadViewerUrl(base.split('#')[0] + '#slide-' + (index + 1));
+  scrollFilmTo(index);
   renderFilmstrip();
 }
 
@@ -626,7 +661,8 @@ function sceneReady(titles, deck) {
 /* ---- transições de cena dirigidas pelos eventos ---- */
 function resetScene() {
   sceneTotal = 0; sceneTitles = []; sceneStatus = []; sceneStageIdx = -1; sceneDone = false; sceneElapsed = 0;
-  currentSlideIdx = -1; clearTimeout(filmThumbTimer);
+  currentSlideIdx = -1; stagePinned = false; clearTimeout(filmThumbTimer);
+  setStageBuildLabel('');
   renderRail(); renderFilmstrip();
   const st = $('stageStatus'); if (st) { st.textContent = ''; st.dataset.t = ''; st.classList.remove('show'); }
 }
@@ -659,16 +695,21 @@ function sceneSlide(index, total, title, status) {
   sceneStatus[index] = status || 'building';
   if (sceneStageIdx < 2) sceneStageIdx = 2;
   const label = title || sceneTitles[index] || ('slide ' + (index + 1));
-  if (status === 'fixing') setStatusLine('Ajustando: ' + label);
-  else if (status === 'done') setStatusLine('Slide pronto: ' + label);
-  else setStatusLine('Construindo: ' + label);
+  const n = index + 1;
+  if (status === 'fixing') { setStatusLine('Ajustando slide ' + n + ': ' + label + '…'); setStageBuildLabel('Ajustando o slide ' + n + '…'); }
+  else if (status === 'done') { setStatusLine('Slide ' + n + ' pronto'); }
+  else { setStatusLine('Montando slide ' + n + ': ' + label + '…'); setStageBuildLabel('Montando o slide ' + n + '…'); }
   renderFilmstrip();
   renderRail();
+  /* segue a frente de construção na tira (sem atrapalhar quem está inspecionando um slide) */
+  if (!stagePinned) scrollFilmTo(heroFrameIdx());
 }
 
 /* deck_ready: filmstrip permanece, trilha colapsa num resumo */
 function finishScene() {
   sceneDone = true;
+  stagePinned = false;
+  setStageBuildLabel('');
   freezeClock();
   sceneElapsed = jobStartAt ? Math.max(0, Math.round((Date.now() - jobStartAt) / 1000)) : sceneElapsed;
   if (!sceneTotal && sceneStatus.length) sceneTotal = sceneStatus.length;
@@ -713,15 +754,29 @@ function loadDeckIntoViewer(deck) {
   }
 }
 
+/* geração SEQUENCIAL: a cada preview novo o palco navega até o ÚLTIMO slide pronto
+   (#slide-N no preview parcial) e o deixa em destaque — o usuário assiste a cascata
+   de componentes do SlideKit surgir enquanto o próximo slide é montado. O crossfade
+   de 2 iframes evita tela branca; se o usuário fixou um slide (stagePinned), o palco
+   não é puxado — só as miniaturas se atualizam. */
 function schedulePreview(v) {
   if (v) previewVer = v;
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
-    if (!currentJobId) return;
-    currentSlideIdx = -1;   // o palco volta pro preview completo → sem quadro "atual" fixado
-    loadViewerUrl('/api/jobs/' + currentJobId + '/preview?v=' + previewVer);
+    if (!currentJobId || sceneDone) return;
+    if (stagePinned) return;   // usuário está inspecionando um slide → não puxa o palco
+    const base = '/api/jobs/' + currentJobId + '/preview?v=' + previewVer;
+    const focus = latestDoneIdx();
+    if (focus >= 0) {
+      currentSlideIdx = focus;
+      loadViewerUrl(base + '#slide-' + (focus + 1));
+      scrollFilmTo(focus);
+    } else {
+      currentSlideIdx = -1;    // nenhum slide pronto ainda → preview completo (placeholder cobre o vazio)
+      loadViewerUrl(base);
+    }
     renderFilmstrip();
-  }, 800);
+  }, STAGE_SETTLE);
 }
 
 function stopJobStream() {
