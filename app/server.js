@@ -140,7 +140,7 @@ function launchGenerate(input, ctx) {
   const job = newJob(ctx.orgId, ctx.conversationId, 'generate');
   (async () => {
     try {
-      const brandKit = ctx.org.brand || {};
+      const brandKit = ctx.getBrand ? ctx.getBrand() : (ctx.org.brand || {});
       const result = await runPipeline(
         { ...input, ...previewHooks(job) },
         brandKit,
@@ -178,7 +178,7 @@ function launchEdit(input, ctx) {
       const r = await q('SELECT * FROM decks WHERE conversation_id = $1 ORDER BY updated_at DESC LIMIT 1', [ctx.conversationId]);
       const row = r.rows[0];
       if (!row) throw new Error('esta conversa ainda não tem apresentação para editar');
-      const brandKit = ctx.org.brand || {};
+      const brandKit = ctx.getBrand ? ctx.getBrand() : (ctx.org.brand || {});
       // decks.slides guarda [{spec}] (specs do contrato §2); o editor trabalha spec-a-spec.
       const specs = (row.slides || []).map((s) => s && s.spec).filter(Boolean);
       const deck = { title: row.title, outline: row.outline, slides: specs.map((spec) => ({ spec })), brand: brandKit.name || '' };
@@ -341,13 +341,17 @@ async function handleChat(req, res, sess) {
     const messages = hist.rows.map((m) => ({ role: m.role, content: m.content }));
 
     const deck = await latestDeck(conversationId);
-    const ctx = { orgId: sess.orgId, conversationId, org };
+    /* kit efetivo = padrão da empresa (orgs.brand: cores/logo/bordas via configurações)
+       + overrides DESTA conversa (o entrevistador só grava aqui — nunca no org,
+       para um chat não vazar tema/nome para os outros) */
+    const mergedBrand = () => ({ ...(org.brand || {}), ...(conv.brand || {}) });
+    const ctx = { orgId: sess.orgId, conversationId, org, getBrand: mergedBrand };
     const { reply } = await interviewTurn(
       messages,
-      { brand: org.brand || {}, deck: deck ? { id: deck.id, title: deck.title, version: deck.version } : null },
+      { brand: mergedBrand(), deck: deck ? { id: deck.id, title: deck.title, version: deck.version } : null },
       {
         updateBrand: (input) => {
-          const cur = org.brand || {};
+          const cur = conv.brand || {};
           const next = {
             ...cur,
             ...(input.name !== undefined ? { name: String(input.name) } : {}),
@@ -355,9 +359,9 @@ async function handleChat(req, res, sess) {
             ...(input.radius !== undefined ? { radius: String(input.radius) } : {}),
           };
           if (input.colors) next.colors = { ...(cur.colors || {}), ...input.colors };
-          org.brand = next;
-          q('UPDATE orgs SET brand = $1 WHERE id = $2', [JSON.stringify(next), sess.orgId]).catch(() => {});
-          return next;
+          conv.brand = next;
+          q('UPDATE conversations SET brand = $1 WHERE id = $2', [JSON.stringify(next), conversationId]).catch(() => {});
+          return mergedBrand();
         },
         startGeneration: (input) => launchGenerate({ ...input, docs: convDocs }, ctx),
         startEdit: (input) => launchEdit(input, ctx),

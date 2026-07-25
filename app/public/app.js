@@ -33,6 +33,9 @@ let sceneDone = false;
 let sceneElapsed = 0;            // segundos totais congelados no fim
 let clockTimer = null;
 let clockFrozen = false;
+let currentSlideIdx = -1;        // slide exibido no palco → destaque .is-current no filmstrip
+let filmThumbTimer = null;       // debounce generoso p/ recarregar as miniaturas ao trocar de versão
+let readyTitles = [];            // títulos persistidos p/ remontar a cena pronta ao reabrir o viewer
 
 /* refs de layout resolvidas no boot (script no fim do body) */
 const main = $('main');
@@ -459,53 +462,151 @@ function setStatusLine(text) {
   requestAnimationFrame(() => requestAnimationFrame(() => { st.textContent = t; if (t) st.classList.add('show'); }));
 }
 
-/* ---- filmstrip: um quadro 16:9 por slide do roteiro ---- */
+/* ---- filmstrip: MINIATURAS REAIS 16:9, uma por slide do roteiro ----
+   Cada quadro pronto vira um preview de verdade: um <iframe> em miniatura
+   carregando a mesma URL do palco (#slide-N) escalado via transform. O iframe
+   é criado só quando o slide fica 'done' e reutilizado — renderFilmstrip atualiza
+   incrementalmente (classe/legenda/destaque), sem reconstruir o DOM a cada evento. */
 function heroFrameIdx() {
   let building = -1, lastDone = -1;
   sceneStatus.forEach((s, i) => { if (s === 'building' || s === 'fixing') building = i; if (s === 'done') lastDone = i; });
   return building >= 0 ? building : lastDone;
 }
 
-function renderFilmstrip() {
+function filmstripVisible(v) {
+  const wrap = document.querySelector('.filmstrip-wrap');
+  if (wrap) wrap.classList.toggle('is-hidden', !v);
+}
+
+/* URL da miniatura do slide index (preview parcial durante a geração; /deck/:id depois) */
+function thumbUrlFor(index) {
+  const base = currentStageBase();
+  if (!base) return null;
+  return base.split('#')[0] + '#slide-' + (index + 1);
+}
+
+/* cria o iframe da miniatura só na primeira vez que o slide fica pronto e reutiliza */
+function ensureThumbFrame(item, index) {
+  if (item._frame) return item._frame;
+  const url = thumbUrlFor(index);
+  if (!url) return null;
+  const f = document.createElement('iframe');
+  f.className = 'film-frame';
+  f.title = '';
+  f.setAttribute('aria-hidden', 'true');
+  f.tabIndex = -1;
+  f.setAttribute('scrolling', 'no');
+  f.setAttribute('loading', 'lazy');
+  f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  item._frame = f;
+  item._frameUrl = url;
+  f.src = url;
+  const thumb = item.querySelector('.film-thumb');
+  thumb.insertBefore(f, thumb.firstChild);
+  thumb.classList.add('has-frame');
+  return f;
+}
+
+function pointThumbFrame(item, index, force) {
+  if (!item._frame) return;
+  const url = thumbUrlFor(index);
+  if (!url || (!force && url === item._frameUrl)) return;
+  item._frameUrl = url;
+  item._frame.src = url;
+}
+
+/* troca de versão do preview → recarrega as miniaturas prontas, com debounce
+   generoso p/ não recarregar N iframes a cada slide que fica pronto */
+function scheduleThumbRefresh() {
+  clearTimeout(filmThumbTimer);
+  filmThumbTimer = setTimeout(() => {
+    const strip = $('filmstrip');
+    if (!strip) return;
+    [...strip.children].forEach((item, i) => { if (sceneStatus[i] === 'done') pointThumbFrame(item, i); });
+  }, 2500);
+}
+
+/* deck_ready → miniaturas apontam pro /deck/:id#slide-N definitivo (escalonado p/ suavizar) */
+function repointThumbsToDeck() {
   const strip = $('filmstrip');
-  if (!strip) return;
-  if (!sceneTotal) { strip.innerHTML = ''; return; }
-  if (strip.childElementCount !== sceneTotal) {
-    strip.innerHTML = '';
-    for (let i = 0; i < sceneTotal; i++) {
-      const item = el('button', 'film-item');
-      item.type = 'button';
-      item.dataset.i = String(i);
-      item.innerHTML =
-        `<span class="film-thumb"><span class="film-num">${i + 1}</span>` +
-        `<span class="film-shimmer"></span><span class="film-check">✓</span></span>` +
-        `<span class="film-label"></span>`;
-      item.onclick = () => gotoSlide(Number(item.dataset.i));
-      strip.appendChild(item);
-    }
-  }
-  const hero = heroFrameIdx();
+  if (!strip || !currentDeckId) return;
+  let n = 0;
   [...strip.children].forEach((item, i) => {
-    const status = sceneStatus[i] || '';
-    item.className = 'film-item ' + (status ? 'is-' + status : 'is-empty') + (i === hero ? ' is-current' : '');
-    const label = item.querySelector('.film-label');
-    const title = sceneTitles[i] || ('Slide ' + (i + 1));
-    label.textContent = title;
-    item.disabled = status !== 'done';
-    item.title = status === 'done' ? ('Ir para o slide ' + (i + 1) + ' · ' + title) : title;
+    if (!item._frame || sceneStatus[i] !== 'done') return;
+    const url = '/deck/' + currentDeckId + '#slide-' + (i + 1);
+    if (url === item._frameUrl) return;
+    const delay = (n++) * 140;
+    setTimeout(() => { if (item._frame) { item._frameUrl = url; item._frame.src = url; } }, delay);
   });
 }
 
-/* clique num quadro pronto → navega o iframe até o slide (o deck lê #slide-N no load) */
+/* garante que existam exatamente sceneTotal quadros, preservando os já montados
+   (e seus iframes) ao crescer durante a geração */
+function buildFilmstrip() {
+  const strip = $('filmstrip');
+  if (!strip) return;
+  while (strip.childElementCount > sceneTotal) strip.removeChild(strip.lastChild);
+  for (let i = strip.childElementCount; i < sceneTotal; i++) {
+    const item = el('button', 'film-item is-empty');
+    item.type = 'button';
+    item.dataset.i = String(i);
+    item.disabled = true;
+    item.innerHTML =
+      `<span class="film-thumb">` +
+        `<span class="film-num">${i + 1}</span>` +
+        `<span class="film-shimmer"></span>` +
+        `<span class="film-idx" aria-hidden="true">${i + 1}</span>` +
+        `<span class="film-check" aria-hidden="true">✓</span>` +
+      `</span>` +
+      `<span class="film-label"></span>`;
+    item.onclick = () => gotoSlide(Number(item.dataset.i));
+    strip.appendChild(item);
+  }
+}
+
+function renderFilmstrip() {
+  const strip = $('filmstrip');
+  if (!strip) return;
+  if (!sceneTotal) { filmstripVisible(false); strip.innerHTML = ''; return; }
+  filmstripVisible(true);
+  buildFilmstrip();
+  const hero = heroFrameIdx();
+  [...strip.children].forEach((item, i) => {
+    const status = sceneStatus[i] || '';
+    const done = status === 'done';
+    const cls = status ? 'is-' + status : 'is-empty';
+    if (item._cls !== cls) {
+      item.classList.remove('is-empty', 'is-building', 'is-fixing', 'is-done');
+      item.classList.add(cls);
+      item._cls = cls;
+    }
+    const title = sceneTitles[i] || ('Slide ' + (i + 1));
+    if (item._label !== title) {
+      item.querySelector('.film-label').textContent = title;
+      item._label = title;
+    }
+    if (done) ensureThumbFrame(item, i);
+    /* destaque: is-current = slide em exibição; is-active = quadro em construção */
+    item.classList.toggle('is-current', i === currentSlideIdx);
+    item.classList.toggle('is-active', !sceneDone && currentSlideIdx < 0 && i === hero);
+    if (item.disabled === done) item.disabled = !done;
+    const t = done ? ('Ir para o slide ' + (i + 1) + ' · ' + title) : title;
+    if (item._title !== t) { item.title = t; item.setAttribute('aria-label', t); item._title = t; }
+  });
+}
+
+/* clique num quadro pronto → navega o palco até o slide (o deck lê #slide-N no load) */
 function gotoSlide(index) {
   if (sceneStatus[index] !== 'done') return;
   const base = currentStageBase();
   if (!base) return;
+  currentSlideIdx = index;
   loadViewerUrl(base.split('#')[0] + '#slide-' + (index + 1));
+  renderFilmstrip();
 }
 
-/* cena estática ao reabrir uma conversa já pronta: filmstrip completo + resumo,
-   usando os títulos dos specs persistidos (conv.slideTitles) */
+/* cena estática ao reabrir uma conversa já pronta: filmstrip completo (com miniaturas
+   reais) + resumo, usando os títulos dos specs persistidos (conv.slideTitles) */
 function sceneReady(titles, deck) {
   sceneDone = true;
   sceneStageIdx = AGENT_STEPS.length - 1;
@@ -513,6 +614,9 @@ function sceneReady(titles, deck) {
   sceneTitles = (titles || []).map((t, i) => t || ('Slide ' + (i + 1)));
   sceneTotal = sceneTitles.length;
   sceneStatus = sceneTitles.map(() => 'done');
+  readyTitles = sceneTitles.slice();
+  currentSlideIdx = -1;
+  if (deck) currentDeckId = deck.id;
   renderRail();
   renderFilmstrip();
   setStatusLine('Apresentação pronta');
@@ -522,6 +626,7 @@ function sceneReady(titles, deck) {
 /* ---- transições de cena dirigidas pelos eventos ---- */
 function resetScene() {
   sceneTotal = 0; sceneTitles = []; sceneStatus = []; sceneStageIdx = -1; sceneDone = false; sceneElapsed = 0;
+  currentSlideIdx = -1; clearTimeout(filmThumbTimer);
   renderRail(); renderFilmstrip();
   const st = $('stageStatus'); if (st) { st.textContent = ''; st.dataset.t = ''; st.classList.remove('show'); }
 }
@@ -585,6 +690,7 @@ function renderReadyStatic() {
 /* volta o painel ao estado inicial (trocar de conversa) */
 function resetViewer() {
   stopClock(); clockFrozen = false;
+  readyTitles = [];
   const c = $('viewerClock'); if (c) c.textContent = '0:00';
   setClockVisible(false);
   resetScene();
@@ -594,17 +700,27 @@ function resetViewer() {
 
 function loadDeckIntoViewer(deck) {
   if (!deck) return;
-  setViewerTitle(deck.title || 'Apresentação');
   setClockVisible(false);
-  renderReadyStatic();
-  loadViewerUrl('/deck/' + deck.id);
+  currentDeckId = deck.id;
+  /* reabrir o viewer de uma apresentação pronta: se conhecemos os slides, remonta a
+     cena completa com miniaturas reais; senão cai no resumo estático (sem filmstrip) */
+  if (readyTitles.length) {
+    sceneReady(readyTitles, deck);
+  } else {
+    setViewerTitle(deck.title || 'Apresentação');
+    renderReadyStatic();
+    loadViewerUrl('/deck/' + deck.id);
+  }
 }
 
 function schedulePreview(v) {
   if (v) previewVer = v;
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
-    if (currentJobId) loadViewerUrl('/api/jobs/' + currentJobId + '/preview?v=' + previewVer);
+    if (!currentJobId) return;
+    currentSlideIdx = -1;   // o palco volta pro preview completo → sem quadro "atual" fixado
+    loadViewerUrl('/api/jobs/' + currentJobId + '/preview?v=' + previewVer);
+    renderFilmstrip();
   }, 800);
 }
 
@@ -647,6 +763,7 @@ function handleJobEvent(ev) {
         break;
       case 'preview':
         schedulePreview(ev.version);
+        scheduleThumbRefresh();
         break;
       case 'deck_ready':
         onDeckReady(ev.deckId, ev.url);
@@ -674,10 +791,12 @@ async function onDeckReady(deckId, url) {
   finishScene();
   setConvState('ready');
   const target = url || (currentDeckId ? ('/deck/' + currentDeckId) : null);
-  if (target) loadViewerUrl(target);
+  if (target) { currentSlideIdx = -1; loadViewerUrl(target); }
+  repointThumbsToDeck();
   await reloadConversationMeta();
   const deck = latestDeck();
   if (deck && deck.title) setViewerTitle(deck.title);
+  readyTitles = sceneTitles.slice();
   spawnCard(cardDeck(deck, currentDeckId));
 }
 

@@ -58,10 +58,23 @@ export async function migrate() {
       user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title text NOT NULL DEFAULT 'Nova conversa',
       docs jsonb NOT NULL DEFAULT '[]',
+      brand jsonb NOT NULL DEFAULT '{}',
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
+
+  /* kit de marca por conversa (o entrevistador grava aqui; orgs.brand vira só o
+     padrão da empresa). Migração one-shot: ao criar a coluna, remove name/tone
+     que o entrevistador antigo gravou no org — eram temas de apresentação
+     vazando para todas as conversas da organização. */
+  const hasConvBrand = await q(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'conversations' AND column_name = 'brand'`,
+  );
+  if (!hasConvBrand.rows.length) {
+    await q(`ALTER TABLE conversations ADD COLUMN brand jsonb NOT NULL DEFAULT '{}'`);
+    await q(`UPDATE orgs SET brand = (brand - 'name') - 'tone' WHERE brand ?| array['name','tone']`);
+  }
 
   await q(`
     CREATE TABLE IF NOT EXISTS messages (
